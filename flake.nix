@@ -29,6 +29,15 @@
         localSystem = buildSystem;
         crossSystem = targetSystem;
         config.allowUnfreePredicate = allowRkbin;
+        overlays = [
+          # Embedded kernels have most drivers built-in, not as loadable modules.
+          # The module closure builder doesn't know about builtins and errors out.
+          # Same trick as nixos-xlnx/nixos-zedboard — let missing .ko files slide.
+          (final: prev: {
+            makeModulesClosure = x:
+              prev.makeModulesClosure (x // { allowMissing = true; });
+          })
+        ];
       };
 
       pkgsNative = import nixpkgs {
@@ -44,6 +53,9 @@
           specialArgs = {
             # Pass finix module set so configs can import optional modules
             inherit finixModules;
+            # Raw finix source path — needed by cross-toplevel.nix to reference
+            # files like finit/switch-to-configuration.sh
+            finixSrc = finix;
           };
           modules = [
             finixModules.default
@@ -56,6 +68,7 @@
         modules = [
           ./configuration.nix
           ./modules/u-boot-rockchip
+          ./modules/cross-toplevel.nix
         ];
       };
 

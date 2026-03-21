@@ -14,7 +14,7 @@ finix is an experimental NixOS alternative using [finit](https://github.com/trog
 - [x] Vendor U-Boot package (rockchip-linux/u-boot)
 - [x] `providers.bootloader` backend for Rockchip U-Boot + extlinux.conf
 - [x] System configuration targeting SD card boot
-- [x] SD card image generation script
+- [ ] SD card image generation (TODO: rethink as a proper Nix derivation)
 - [ ] First successful cross-build of system closure
 - [ ] QEMU validation
 - [ ] First hardware boot
@@ -36,16 +36,7 @@ nix build .#packages.x86_64-linux.u-boot-rk3506
 
 ## SD card image
 
-```bash
-# Build everything, then generate the SD card image
-nix build .#nixosConfigurations.rk3506.config.system.topLevel -o system
-nix build .#packages.x86_64-linux.u-boot-rk3506 -o uboot
-
-./scripts/gen-sd-image.sh ./system ./uboot sdcard.img
-
-# Flash to SD card
-sudo dd if=sdcard.img of=/dev/sdX bs=4M status=progress
-```
+TODO: SD card image generation needs a proper rethink — ideally a pure Nix derivation instead of an imperative bash script with `sudo`.
 
 ## Hardware
 

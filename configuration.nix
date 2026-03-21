@@ -34,8 +34,9 @@ in
     "rw"
   ];
 
-  # ARM-specific initrd modules
-  boot.initrd.availableKernelModules = [
+  # ARM-specific initrd modules — mkForce to override finix's x86-centric defaults
+  # (ahci, nvme, sata_*, etc. don't exist in the RK3506 kernel)
+  boot.initrd.availableKernelModules = lib.mkForce [
     # SD card
     "dw_mmc"
     "dw_mmc_rockchip"
@@ -95,6 +96,11 @@ in
     runlevels = "2345";
     nowait = true;
   };
+
+  # --- Desktop features we absolutely do not need on an embedded board ---
+  xdg.portal.enable = false;
+
+
 
   # --- Services ---
   # sysklogd imported above — many finit conditions depend on syslogd
