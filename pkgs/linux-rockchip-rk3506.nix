@@ -10,7 +10,7 @@
   ...
 }:
 
-buildLinux {
+(buildLinux {
   version = "6.1.118-rockchip";
   modDirVersion = "6.1.118";
 
@@ -95,4 +95,15 @@ buildLinux {
     platforms = [ "armv7l-linux" ];
     description = "Rockchip BSP Linux kernel 6.1 for RK3506";
   };
-}
+}).overrideAttrs (old: {
+  # Add Luckfox Lyra DTS files (not present in upstream rockchip-linux/kernel).
+  # These are from Luckfox's kernel fork, branch luckfox-linux-6.1-rk3506.
+  postPatch = (old.postPatch or "") + ''
+    cp ${./kernel-dts/rk3506-luckfox-lyra.dtsi} arch/arm/boot/dts/rk3506-luckfox-lyra.dtsi
+    cp ${./kernel-dts/rk3506g-luckfox-lyra-sd.dts} arch/arm/boot/dts/rk3506g-luckfox-lyra-sd.dts
+
+    # Register in the DTS Makefile so `make dtbs` builds it
+    sed -i '/rk3506g-demo-display-control.dtb/a\\trk3506g-luckfox-lyra-sd.dtb \\' \
+      arch/arm/boot/dts/Makefile
+  '';
+})

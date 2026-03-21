@@ -58,15 +58,14 @@ in
   ];
 
   # --- Filesystems ---
-  # SD card root partition (Phase 5a: simplest boot strategy)
+  # GPT layout: part1=uboot (raw), part2=boot (FAT32), part3=rootfs (ext4)
   fileSystems."/" = {
-    device = "/dev/mmcblk0p2";
+    device = "/dev/mmcblk0p3";
     fsType = "ext4";
   };
 
-  # Boot partition (FAT32 for extlinux.conf)
   fileSystems."/boot" = {
-    device = "/dev/mmcblk0p1";
+    device = "/dev/mmcblk0p2";
     fsType = "vfat";
     options = [ "nofail" ];
   };
@@ -75,9 +74,8 @@ in
   programs.u-boot-rockchip = {
     enable = true;
     package = u-boot-rk3506;
-    # DTB path as U-Boot resolves it from the boot partition
-    # TODO: adjust for your specific board
-    dtbPath = "/boot/dtb/rk3506g-evb1-v10.dtb";
+    # DTB path relative to /boot — extlinux.conf FDT directive
+    dtbPath = "/dtb/rk3506g-luckfox-lyra-sd.dtb";
     bootDevice = "/dev/mmcblk0";
   };
 

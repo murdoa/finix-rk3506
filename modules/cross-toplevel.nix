@@ -171,7 +171,12 @@ in
           ) config.specialisation}
         ''
         + lib.optionalString config.boot.kernel.enable ''
-          ${hostCoreutils}/bin/ln -s ${config.boot.kernelPackages.kernel}/bzImage $out/kernel
+          # ARM32 produces zImage (not bzImage). Detect which one exists.
+          if [ -e ${config.boot.kernelPackages.kernel}/bzImage ]; then
+            ${hostCoreutils}/bin/ln -s ${config.boot.kernelPackages.kernel}/bzImage $out/kernel
+          else
+            ${hostCoreutils}/bin/ln -s ${config.boot.kernelPackages.kernel}/zImage $out/kernel
+          fi
           ${hostCoreutils}/bin/ln -s ${config.system.modulesTree} $out/kernel-modules
           ${hostCoreutils}/bin/ln -s ${config.hardware.firmware}/lib/firmware $out/firmware
         ''

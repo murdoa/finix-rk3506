@@ -72,13 +72,34 @@
         ];
       };
 
-      packages.${buildSystem} = {
+      packages.${buildSystem} = rec {
         # Cross-compiled packages for the target
         rkbin = pkgsNative.callPackage ./pkgs/rkbin.nix { };
         linux-rockchip-rk3506 = pkgsCross.callPackage ./pkgs/linux-rockchip-rk3506.nix { };
         u-boot-rk3506 = pkgsCross.callPackage ./pkgs/u-boot-rk3506.nix {
-          rkbin = self.packages.${buildSystem}.rkbin;
+          inherit rkbin;
         };
+
+        # Bootable SD card image
+        sdImage = pkgsNative.callPackage ./pkgs/sd-image.nix {
+          pkgs = pkgsCross;
+          inherit pkgsNative;
+          lib = pkgsCross.lib;
+          systemTopLevel = (finixSystem {
+            modules = [
+              ./configuration.nix
+              ./modules/u-boot-rockchip
+              ./modules/cross-toplevel.nix
+            ];
+          }).config.system.topLevel;
+          inherit u-boot-rk3506;
+          kernel = linux-rockchip-rk3506;
+        };
+      };
+
+      apps.${buildSystem} = import ./apps {
+        pkgs = pkgsNative;
+        sdImage = self.packages.${buildSystem}.sdImage;
       };
     };
 }
