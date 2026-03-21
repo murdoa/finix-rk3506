@@ -103,6 +103,13 @@
 	};
 };
 
+/* Move ramoops to high memory — the default 0x83000 overlaps with the DTB
+ * which U-Boot loads at ~0x63000. The kernel doesn't copy FDT property data
+ * during unflatten, so ramoops writes corrupt DTB values in-place. */
+&ramoops {
+	reg = <0x05FD0000 0x2d000>;
+};
+
 &saradc {
 	vref-supply = <&vcc_1v8>;
 	status = "okay";
