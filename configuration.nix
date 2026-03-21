@@ -101,6 +101,11 @@ in
 
 
   # --- Services ---
+  # mdevd — device manager for initrd coldplug and runtime hotplug.
+  # Without this, /dev/mmcblk0p3 doesn't exist when the initrd tries
+  # to mount the rootfs at /sysroot.
+  services.mdevd.enable = true;
+
   # sysklogd imported above — many finit conditions depend on syslogd
   services.sysklogd.enable = true;
 
