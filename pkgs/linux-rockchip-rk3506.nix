@@ -106,7 +106,5 @@
     sed -i '/rk3506g-demo-display-control.dtb/a\\trk3506g-luckfox-lyra-sd.dtb \\' \
       arch/arm/boot/dts/Makefile
 
-    # Debug: add detailed error reporting to pinctrl parse
-    patch -p1 < ${./0001-pinctrl-debug.patch} || echo "WARNING: pinctrl debug patch failed to apply"
   '';
 })
