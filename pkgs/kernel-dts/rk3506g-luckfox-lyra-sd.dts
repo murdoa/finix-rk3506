@@ -26,7 +26,11 @@
 
 /* ---- Disable everything we don't need for SD card boot ---- */
 
-/* Display */
+/* Display disabled — reclaim the 32MB CMA the board DTSI reserves for framebuffers */
+&cma {
+	size = <0x0>;
+};
+
 &dsi {
 	status = "disabled";
 };

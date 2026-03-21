@@ -3,3 +3,4 @@ result-*
 sdcard.img
 *.img
 .pi/
+*.pdf
