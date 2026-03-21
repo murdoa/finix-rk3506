@@ -34,7 +34,7 @@ let
   dtbName = "rk3506g-luckfox-lyra-sd.dtb";
 
   # Kernel params from configuration.nix (duplicated here for extlinux.conf)
-  kernelParams = "console=ttyFIQ0 earlycon=uart8250,mmio32,0xff0a0000 rootwait rw root=/dev/mmcblk0p3 rootfstype=ext4";
+  kernelParams = "console=ttyFIQ0 earlycon=uart8250,mmio32,0xff0a0000 rootwait rw root=/dev/mmcblk0p3 rootfstype=ext4 fw_devlink=permissive";
 in
 pkgsNative.stdenv.mkDerivation {
   name = "finix-rk3506.img";

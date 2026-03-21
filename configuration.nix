@@ -32,6 +32,11 @@ in
     "earlycon=uart8250,mmio32,0xff0a0000"
     "rootwait"
     "rw"
+    # fw_devlink=on (default in 6.1) blocks device probe until all DT suppliers
+    # are ready. On the RK3506, this causes the MMC controller to sit in deferred
+    # probe indefinitely — something in the supplier chain never resolves.
+    # "permissive" still creates the device links but doesn't enforce probe ordering.
+    "fw_devlink=permissive"
   ];
 
   # ARM-specific initrd modules — mkForce to override finix's x86-centric defaults
