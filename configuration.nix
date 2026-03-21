@@ -72,6 +72,11 @@ in
   # immediately after mdevd coldplug. The fs-import retry loop (30x1s)
   # re-runs this until the device shows up.
   boot.initrd.fileSystemImportCommands = ''
+    echo "fs-import: ls /dev/mmcblk*:" >/dev/console 2>&1
+    ls /dev/mmcblk* >/dev/console 2>&1 || true
+    echo "fs-import: ls /dev/mmc*:" >/dev/console 2>&1
+    ls /dev/mmc* >/dev/console 2>&1 || true
+    echo "fs-import: testing /dev/mmcblk0p3" >/dev/console 2>&1
     test -b /dev/mmcblk0p3
   '';
 
