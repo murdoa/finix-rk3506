@@ -6,6 +6,7 @@
   config,
   pkgs,
   lib,
+  finixModules,
   ...
 }:
 let
@@ -16,6 +17,10 @@ let
   };
 in
 {
+  imports = [
+    finixModules.sysklogd
+  ];
+
   # --- Networking ---
   networking.hostName = "finix-rk3506";
 
@@ -92,7 +97,7 @@ in
   };
 
   # --- Services ---
-  # Keep it minimal for initial bring-up
+  # sysklogd imported above — many finit conditions depend on syslogd
   services.sysklogd.enable = true;
 
   # --- Packages ---

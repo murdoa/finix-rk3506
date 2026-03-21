@@ -23,18 +23,28 @@
       # Target
       targetSystem = "armv7l-linux";
 
+      allowRkbin = pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "rkbin-rk3506" ];
+
       pkgsCross = import nixpkgs {
         localSystem = buildSystem;
         crossSystem = targetSystem;
+        config.allowUnfreePredicate = allowRkbin;
       };
 
-      pkgsNative = import nixpkgs { system = buildSystem; };
+      pkgsNative = import nixpkgs {
+        system = buildSystem;
+        config.allowUnfreePredicate = allowRkbin;
+      };
 
       finixModules = import "${finix}/modules";
 
       finixSystem =
         { modules ? [ ] }:
         pkgsCross.lib.evalModules {
+          specialArgs = {
+            # Pass finix module set so configs can import optional modules
+            inherit finixModules;
+          };
           modules = [
             finixModules.default
             { nixpkgs.pkgs = pkgsCross; }

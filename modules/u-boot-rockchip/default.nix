@@ -15,20 +15,6 @@
 let
   cfg = config.programs.u-boot-rockchip;
 
-  # Generate extlinux.conf pointing at the system closure
-  extlinuxConf = pkgs.writeText "extlinux.conf" ''
-    DEFAULT finix
-    TIMEOUT 30
-    PROMPT 0
-
-    LABEL finix
-      MENU LABEL finix (${config.system.topLevel.name})
-      LINUX ${config.system.topLevel}/kernel
-      INITRD ${config.system.topLevel}/initrd
-      FDT ${cfg.dtbPath}
-      APPEND init=${config.system.topLevel}/init ${toString config.boot.kernelParams}
-  '';
-
   # Script to install/update the bootloader and boot config on the target media
   installScript = pkgs.writeShellScript "u-boot-rockchip-install" ''
     set -euo pipefail
@@ -137,16 +123,13 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    # Disable kernel direct-boot in QEMU when using U-Boot
-    # (U-Boot handles loading kernel + DTB + initrd)
-
     environment.systemPackages = [
       cfg.package
     ];
 
-    # Ensure extlinux.conf is in /boot
-    environment.etc."extlinux/extlinux.conf" = {
-      source = extlinuxConf;
-    };
+    # NOTE: extlinux.conf is NOT placed in /etc — it lives on the boot
+    # partition and is written by the install hook at switch-to-configuration
+    # time. This avoids infinite recursion (extlinux.conf references
+    # system.topLevel which depends on environment.etc).
   };
 }
