@@ -20,6 +20,8 @@ buildLinux {
   autoModules = false;
   preferBuiltin = false;
 
+
+
   src = fetchFromGitHub {
     owner = "rockchip-linux";
     repo = "kernel";
@@ -36,6 +38,10 @@ buildLinux {
   #
   # Add anything finix specifically needs that the vendor missed:
   structuredExtraConfig = with lib.kernel; {
+    # Override vendor's LZ4 kernel compression — lz4c isn't in the nix build env.
+    # Use gzip instead (always available).
+    KERNEL_LZ4 = no;
+    KERNEL_GZIP = yes;
     # Ensure cgroups v2 is available (finit uses cgroups)
     CGROUP_PIDS = yes;
     CGROUP_FREEZER = yes;
