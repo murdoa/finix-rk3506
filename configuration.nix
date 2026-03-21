@@ -57,6 +57,15 @@ in
     "mmc_block"
   ];
 
+  # --- Initrd ---
+  # Wait for MMC device to appear before mounting rootfs.
+  # The MMC controller probe is deferred so /dev/mmcblk0p3 isn't available
+  # immediately after mdevd coldplug. The fs-import retry loop (30x1s)
+  # re-runs this until the device shows up.
+  boot.initrd.fileSystemImportCommands = ''
+    test -b /dev/mmcblk0p3
+  '';
+
   # --- Filesystems ---
   # GPT layout: part1=uboot (raw), part2=boot (FAT32), part3=rootfs (ext4)
   fileSystems."/" = {
