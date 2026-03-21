@@ -108,7 +108,7 @@ in
   users.users.root = {
     # Set a password for initial bring-up
     # Generate with: mkpasswd -m sha-512
-    # password = "$6$...";
+    hashedPassword = "$6$cqZKvfwHmoQwVp28$61S9QwBIB3Q5c8mUJt6sZW2cejQIta86KxSeFhDDd1CukI45/Nq0VL7GMVVsqOh9sHySkok2K4M3XpY1i404b/";
   };
 
   # --- TTY ---
