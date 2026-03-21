@@ -80,6 +80,7 @@ in
   services.sysklogd.enable = true;
 
   environment.systemPackages = with pkgs; [
+    btop
     util-linux
     iproute2
     mtdutils
