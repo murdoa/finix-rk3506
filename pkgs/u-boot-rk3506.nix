@@ -32,8 +32,7 @@ stdenv.mkDerivation {
     owner = "rockchip-linux";
     repo = "u-boot";
     rev = "b14196eade471bbc000c368f8555f2a2a1ecc17d";
-    # NOTE: hash needs to be computed on first build — use lib.fakeHash then replace
-    hash = lib.fakeHash;
+    hash = "sha256-+poK56Y+AxZuXoEggbLUezzIIoZMpFZ7FtVmN7/XaQI=";
   };
 
   depsBuildBuild = [ buildPackages.stdenv.cc ];
@@ -65,8 +64,13 @@ stdenv.mkDerivation {
   buildPhase = ''
     runHook preBuild
 
+    # Vendor U-Boot doesn't compile clean with GCC 15:
+    #   -Werror=maybe-uninitialized in pinctrl drivers
+    #   -Werror=enum-int-mismatch in command.c
+    # Suppress these at the CFLAGS level since CONFIG_WERROR=y is baked in.
     make \
       CROSS_COMPILE=${stdenv.cc.targetPrefix} \
+      KCFLAGS="-Wno-error=maybe-uninitialized -Wno-error=enum-int-mismatch -Wno-error=incompatible-pointer-types -Wno-error=int-conversion" \
       -j$NIX_BUILD_CORES
 
     # Generate idbloader.img (SPL + DDR init blob)
