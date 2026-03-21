@@ -16,8 +16,7 @@ stdenvNoCC.mkDerivation {
     owner = "rockchip-linux";
     repo = "rkbin";
     rev = "74213af1e952c4683d2e35952507133b61394862";
-    # NOTE: hash needs to be computed on first build — use lib.fakeHash then replace
-    hash = lib.fakeHash;
+    hash = "sha256-gNCZwJd9pjisk6vmvtRNyGSBFfAYOADTa5Nd6Zk+qEk=";
   };
 
   # Only install the RK3506-relevant blobs, not the entire 2GB+ repo
