@@ -11,15 +11,20 @@
 }:
 
 buildLinux {
-  version = "6.1.99-rockchip";
-  modDirVersion = "6.1.99";
+  version = "6.1.118-rockchip";
+  modDirVersion = "6.1.118";
+
+  # Do NOT let nixpkgs' buildLinux force-enable every tristate as =m
+  # or apply common-config.nix on top of the vendor defconfig.
+  # We want the vendor defconfig as-is.
+  autoModules = false;
+  preferBuiltin = false;
 
   src = fetchFromGitHub {
     owner = "rockchip-linux";
     repo = "kernel";
     rev = "d2b4477a1df699e6639e83837c7dc45ea1d1d73f";
-    # NOTE: hash needs to be computed on first build — use lib.fakeHash then replace
-    hash = lib.fakeHash;
+    hash = "sha256-gAeNeCXqGxvccBhnF8UwYDiMMa+vXgMGLXp8ze0UcEs=";
   };
 
   defconfig = "rk3506_defconfig";
@@ -37,7 +42,6 @@ buildLinux {
     MEMCG = yes;
 
     # Required by mdevd (finix default device manager)
-    # (vendor config already has DEVTMPFS, but be explicit)
     DEVTMPFS = yes;
     DEVTMPFS_MOUNT = yes;
 
@@ -52,7 +56,33 @@ buildLinux {
 
     # For future overlayfs root
     OVERLAY_FS = module;
+
+    # Disable vendor GPU drivers that don't compile with modern GCC.
+    # The RK3506 has no GPU — these are for other Rockchip SoCs and the
+    # defconfig enables them because it's a shared config.
+    MALI400 = no;
+    MALI_MIDGARD = no;
+    MALI_BIFROST = no;
+    MALI_VALHALL = no;
+
+    # Disable stmmac UIO — vendor hack broken against stmmac struct layout
+    STMMAC_UIO = no;
+
+    # Disable camera/media drivers with removed V4L2 APIs
+    VIDEO_ROCKCHIP_PREISP = no;  # rk1608_dphy.c
+    VIDEO_AR0822 = no;
+    VIDEO_AR2020 = no;
+
+    # Disable rockchip secure OTP — uses removed TEE SHM APIs
+    NVMEM_ROCKCHIP_SEC_OTP = no;
   };
+
+  # The vendor kernel has some code that doesn't compile with GCC 15.
+  # -Werror=implicit-function-declaration and -Werror=incompatible-pointer-types
+  # are now default errors in GCC 14+.
+  extraMakeFlags = [
+    "KCFLAGS=-Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration -Wno-error=int-conversion"
+  ];
 
   extraMeta = {
     # This is a 32-bit ARM kernel
