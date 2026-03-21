@@ -106,10 +106,7 @@
     sed -i '/rk3506g-demo-display-control.dtb/a\\trk3506g-luckfox-lyra-sd.dtb \\' \
       arch/arm/boot/dts/Makefile
 
-    # Debug: print which function/group fails during pinctrl parse
-    sed -i 's|dev_err(dev, "failed to parse function\\n");|dev_err(dev, "failed to parse function: %pOFn (index %d), ret=%d\\n", child, i-1, ret);|' \
-      drivers/pinctrl/pinctrl-rockchip.c
-    sed -i 's|"wrong pins number or pins and configs should be by 4\\n"|"wrong pins: %pOFn has %d values (need multiple of 4)\\n", np, size|' \
-      drivers/pinctrl/pinctrl-rockchip.c
+    # Debug: add detailed error reporting to pinctrl parse
+    patch -p1 < ${./0001-pinctrl-debug.patch} || echo "WARNING: pinctrl debug patch failed to apply"
   '';
 })

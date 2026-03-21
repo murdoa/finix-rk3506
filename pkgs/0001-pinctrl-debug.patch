@@ -1,0 +1,56 @@
+--- a/drivers/pinctrl/pinctrl-rockchip.c	2026-03-21 20:50:33.031804849 +0000
++++ b/drivers/pinctrl/pinctrl-rockchip.c	2026-03-21 20:50:42.564932801 +0000
+@@ -4668,7 +4668,7 @@
+ 	/* we do not check return since it's safe node passed down */
+ 	size /= sizeof(*list);
+ 	if (!size || size % 4)
+-		return dev_err_probe(dev, -EINVAL, "wrong pins number or pins and configs should be by 4\n");
++		return dev_err_probe(dev, -EINVAL, "wrong pins: %pOFn has %d values (need multiple of 4)\n", np, size);
+ 
+ 	grp->npins = size / 4;
+ 
+@@ -4683,22 +4683,32 @@
+ 
+ 		num = be32_to_cpu(*list++);
+ 		bank = bank_num_to_bank(info, num);
+-		if (IS_ERR(bank))
++		if (IS_ERR(bank)) {
++			dev_err(dev, "  bad bank %d in group %pOFn\n", num, np);
+ 			return PTR_ERR(bank);
++		}
+ 
+ 		grp->pins[j] = bank->pin_base + be32_to_cpu(*list++);
+ 		grp->data[j].func = be32_to_cpu(*list++);
+ 
+ 		phandle = list++;
+-		if (!phandle)
++		if (!phandle) {
++			dev_err(dev, "  null phandle in group %pOFn pin %d\n", np, j);
+ 			return -EINVAL;
++		}
+ 
+ 		np_config = of_find_node_by_phandle(be32_to_cpup(phandle));
++		if (!np_config)
++			dev_err(dev, "  phandle 0x%x not found for group %pOFn pin %d\n",
++				be32_to_cpup(phandle), np, j);
+ 		ret = pinconf_generic_parse_dt_config(np_config, NULL,
+ 				&grp->data[j].configs, &grp->data[j].nconfigs);
+ 		of_node_put(np_config);
+-		if (ret)
++		if (ret) {
++			dev_err(dev, "  pinconf failed: group %pOFn pin %d ret=%d\n",
++				np, j, ret);
+ 			return ret;
++		}
+ 	}
+ 
+ 	return 0;
+@@ -4773,7 +4783,7 @@
+ 
+ 		ret = rockchip_pinctrl_parse_functions(child, info, i++);
+ 		if (ret) {
+-			dev_err(dev, "failed to parse function\n");
++			dev_err(dev, "failed to parse function: %pOFn (index %d), ret=%d\n", child, i-1, ret);
+ 			of_node_put(child);
+ 			return ret;
+ 		}
