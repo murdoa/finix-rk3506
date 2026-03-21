@@ -61,20 +61,19 @@ stdenv.mkDerivation {
 
     # --- Add Luckfox defconfig ---
     cp ${./u-boot-dts/rk3506_luckfox_defconfig} configs/rk3506_luckfox_defconfig
+
+    # --- Force distro_bootcmd as the boot command ---
+    # evb_rk3506.h does #undef CONFIG_BOOTCOMMAND then redefines it to
+    # RKIMG_BOOTCOMMAND (boot_fit → boot_android — no extlinux!).
+    # We re-undef and set it to run distro_bootcmd directly.
+    sed -i 's|#define CONFIG_BOOTCOMMAND RKIMG_BOOTCOMMAND|#define CONFIG_BOOTCOMMAND "run distro_bootcmd"|' \
+      include/configs/evb_rk3506.h
   '';
 
   configurePhase = ''
     runHook preConfigure
 
     make rk3506_luckfox_defconfig CROSS_COMPILE=${stdenv.cc.targetPrefix}
-
-    # --- Override BOOTCOMMAND for extlinux distro boot ---
-    # The Luckfox defconfig defaults to boot_fit/boot_android.
-    # We want U-Boot to run distro_bootcmd which scans for extlinux.conf.
-    echo 'CONFIG_BOOTCOMMAND="run distro_bootcmd"' >> .config
-
-    # Regenerate the full config with our override applied
-    make olddefconfig CROSS_COMPILE=${stdenv.cc.targetPrefix}
 
     runHook postConfigure
   '';
