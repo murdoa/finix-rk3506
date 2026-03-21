@@ -37,10 +37,13 @@ in
   # ARM-specific initrd modules — mkForce to override finix's x86-centric defaults
   # (ahci, nvme, sata_*, etc. don't exist in the RK3506 kernel)
   boot.initrd.availableKernelModules = lib.mkForce [
-    # SD card
+    # SD card (builtin in vendor defconfig, but listed for documentation)
     "dw_mmc"
     "dw_mmc_rockchip"
     "mmc_block"
+
+    # Filesystems — ext4 is =m in vendor defconfig, must be in initrd to mount rootfs
+    "ext4"
 
     # SPI NAND (for future use)
     "spi_rockchip"
@@ -55,6 +58,7 @@ in
 
   boot.initrd.kernelModules = [
     "mmc_block"
+    "ext4"
   ];
 
   # --- Initrd ---
