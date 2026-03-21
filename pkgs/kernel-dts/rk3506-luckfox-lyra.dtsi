@@ -134,9 +134,9 @@
 		regulator-name = "vdd_cpu";
 		regulator-boot-on;
 		regulator-always-on;
-		regulator-min-microvolt = <500000>;
-		regulator-max-microvolt = <1500000>;
-		vin-supply = <&vdd_cpu>;
+		regulator-min-microvolt = <900000>;
+		regulator-max-microvolt = <900000>;
+		vin-supply = <&vcc_sys>;
 	};
 };
 

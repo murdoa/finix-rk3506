@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Copyright (c) 2024 Rockchip Electronics Co., Ltd.
+ * Minimal SD-card boot DTS for Luckfox Lyra (RK3506G).
+ *
+ * Stripped to the bare essentials for initial bring-up:
+ *   - FIQ debugger serial console
+ *   - SD card (SDMMC)
+ *   - Regulators needed by SDMMC
+ *
+ * Everything else (display, USB, I2C, touch, audio) is disabled or omitted
+ * to avoid probe failures that cascade through fw_devlink and pinctrl.
  */
 
 /dts-v1/;
@@ -12,32 +20,30 @@
 	compatible = "rockchip,rk3506g-demo-display-control", "rockchip,rk3506";
 
 	chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xff0a0000 console=tty1 console=ttyFIQ0 storagemedia=sd root=/dev/mmcblk0p3 rootfstype=ext4 rootwait snd_aloop.index=7 snd_aloop.use_raw_jiffies=1";
+		bootargs = "earlycon=uart8250,mmio32,0xff0a0000 console=ttyFIQ0";
 	};
 };
 
-/**********display**********/
-&cma {
-	size = <0x2000000>;
-};
+/* ---- Disable everything we don't need for SD card boot ---- */
 
+/* Display */
 &dsi {
-	status = "okay";
+	status = "disabled";
 };
 
 &dsi_dphy {
-	status = "okay";
+	status = "disabled";
 };
 
 &dsi_in_vop {
-	status = "okay";
+	status = "disabled";
 };
 
 &route_dsi {
-	status = "okay";
+	status = "disabled";
 };
 
-/**********ethernet**********/
+/* Ethernet */
 &gmac1 {
 	status = "disabled";
 };
@@ -46,13 +52,58 @@
 	status = "disabled";
 };
 
-/**********usb**********/
+/* USB — disable for now, re-enable later */
 &usb20_otg0 {
-	dr_mode = "peripheral";
-	status = "okay";
+	status = "disabled";
 };
 
 &usb20_otg1 {
-	dr_mode = "host";
+	status = "disabled";
+};
+
+/* I2C — not needed for boot */
+&i2c2 {
+	status = "disabled";
+};
+
+/* TSADC — remove pinctrl reference that pulls in rmio */
+&tsadc {
+	status = "disabled";
+};
+
+/* ---- Enable only what we need ---- */
+
+/* SD card */
+&mmc {
+	max-frequency = <52000000>;
+	bus-width = <4>;
+	no-sdio;
+	no-mmc;
+	cap-mmc-highspeed;
+	cap-sd-highspeed;
+	cd-gpios = <&gpio1 RK_PB6 GPIO_ACTIVE_LOW>;
+	disable-wp;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdmmc_clk_pins &sdmmc_cmd_pins &sdmmc_bus4_pins &sdmmc_det &sdmmc_pwren>;
+	vqmmc-supply = <&vcc_3v3>;
+	vmmc-supply = <&vcc_3v3>;
+	status = "okay";
+};
+
+&pinctrl {
+	sdmmc {
+		/omit-if-no-ref/
+		sdmmc_pwren: sdmmc-pwren {
+			rockchip,pins = <1 RK_PB7 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+
+		sdmmc_det: sdmmc-det {
+			rockchip,pins = <1 RK_PB6 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+};
+
+&saradc {
+	vref-supply = <&vcc_1v8>;
 	status = "okay";
 };
