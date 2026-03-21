@@ -32,11 +32,6 @@ in
     "earlycon=uart8250,mmio32,0xff0a0000"
     "rootwait"
     "rw"
-    # fw_devlink=on (default in 6.1) blocks device probe until all DT suppliers
-    # are ready. On the RK3506, this causes the MMC controller to sit in deferred
-    # probe indefinitely — something in the supplier chain never resolves.
-    # "permissive" still creates the device links but doesn't enforce probe ordering.
-    "fw_devlink=permissive"
   ];
 
   # ARM-specific initrd modules — mkForce to override finix's x86-centric defaults
@@ -65,15 +60,6 @@ in
     "mmc_block"
     "ext4"
   ];
-
-  # --- Initrd ---
-  # Wait for MMC device to appear before mounting rootfs.
-  # The MMC controller probe is deferred so /dev/mmcblk0p3 isn't available
-  # immediately after mdevd coldplug. The fs-import retry loop (30x1s)
-  # re-runs this until the device shows up.
-  boot.initrd.fileSystemImportCommands = ''
-    test -b /dev/mmcblk0p3
-  '';
 
   # --- Filesystems ---
   # GPT layout: part1=uboot (raw), part2=boot (FAT32), part3=rootfs (ext4)
