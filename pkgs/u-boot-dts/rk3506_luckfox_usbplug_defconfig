@@ -106,6 +106,9 @@ CONFIG_SPI_FLASH_MACRONIX=y
 CONFIG_SPI_FLASH_XMC=y
 CONFIG_SPI_FLASH_MTD=y
 CONFIG_ROCKCHIP_NEW_IDB=y
+# Disable flash-based BBT — the usbplug writes raw images, not Rockchip BBT format.
+# Without this, the BBT scan fails on a flashed device and mtd_blk reports lba=0.
+# CONFIG_MTD_NAND_BBT_USING_FLASH is not set
 
 # --- MMC (for device scan) ---
 CONFIG_MMC_DW=y
@@ -120,6 +123,7 @@ CONFIG_USB_GADGET_PRODUCT_NUM=0x350f
 CONFIG_USB_GADGET_DWC2_OTG=y
 CONFIG_USB_GADGET_VBUS_DRAW=500
 CONFIG_USB_GADGET_DOWNLOAD=y
+CONFIG_USB_FUNCTION_MASS_STORAGE=y
 
 # --- PHY ---
 CONFIG_PHY_ROCKCHIP_INNO_USB2=y
