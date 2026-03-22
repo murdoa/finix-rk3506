@@ -67,7 +67,8 @@
             echo ""
             echo "Aborted. Dropping to login shell..."
             echo ""
-            exec login -f root
+            stty sane < "$TTY"
+            exec setsid -c login -f root <> "$TTY" >&0 2>&1
           }
 
           echo ""
