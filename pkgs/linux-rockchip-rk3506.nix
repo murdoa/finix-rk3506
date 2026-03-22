@@ -86,6 +86,12 @@
 
     sed -i '/rk3506g-demo-display-control.dtb/a\\trk3506g-luckfox-lyra-sd.dtb \\\n\trk3506g-luckfox-lyra-nand.dtb \\' \
       arch/arm/boot/dts/Makefile
+
+    # Rockchip vendor kernel forces UBI write self-check unconditionally
+    # (changed upstream's "if (!ubi->dbg.chk_io)" to "if (false)").
+    # This causes false positives on SPI NAND where ECC read-back doesn't
+    # byte-match the original write buffer. Revert to upstream behavior.
+    sed -i 's/if (false)/if (!ubi_dbg_chk_io(ubi))/' drivers/mtd/ubi/io.c
   '';
 
   # Strip DTBs to only our board (saves ~20 MiB) and remove System.map (2.7 MiB)
