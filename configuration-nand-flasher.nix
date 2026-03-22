@@ -1,53 +1,25 @@
-# finix system configuration for the NAND flasher SD card.
+# NAND flasher — single-purpose SD card that flashes UBI to SPI NAND.
 #
-# Boots from SD card but uses the NAND DTS so the SPI NAND partitions
-# are visible as /dev/mtd0-4. On first boot, a finit task erases the
-# UBI partition (mtd4) and writes ubi.img through the kernel MTD stack,
-# bypassing the broken Rockchip Loader firmware write path.
-#
-# The ubi.img is placed at /flash/ubi.img on the ext4 rootfs by the
-# SD image builder (sd-nand-flasher-image.nix).
+# Boots from SD card using the NAND DTS so SPI NAND partitions are visible
+# as /dev/mtd0-4. On first boot, a finit task erases the UBI partition and
+# writes ubi.img through the kernel MTD stack.
 #
 # Usage:
 #   1. Write this SD image:      nix run .#flash-nand-sd
 #   2. Insert SD, power on — board boots SD, flashes NAND UBI, reboots
 #
 # This is a fallback. Primary path: nix run .#flash-nand (usbplug + rkdeveloptool)
+{ pkgs, finixModules, board, ... }:
 {
-  config,
-  pkgs,
-  lib,
-  finixModules,
-  board,
-  ...
-}:
-{
-  imports = [ finixModules.sysklogd ];
+  imports = [
+    ./profiles/base.nix
+    finixModules.sysklogd
+  ];
 
   networking.hostName = "nand-flasher";
 
-  boot.kernelPackages = pkgs.linuxPackagesFor board.kernel;
-
-  boot.kernelParams = [
-    "console=ttyFIQ0"
-    "earlycon=uart8250,mmio32,0xff0a0000"
-    "rootwait"
-    "rw"
-  ];
-
-  boot.initrd.availableKernelModules = lib.mkForce [
-    "dw_mmc"
-    "dw_mmc_rockchip"
-    "mmc_block"
-    "ext4"
-    "spi_rockchip"
-    "spi_mem"
-    "mtd"
-  ];
-
   boot.initrd.kernelModules = [ "mmc_block" "ext4" ];
 
-  # SD card rootfs — same as configuration.nix
   fileSystems."/" = {
     device = "/dev/mmcblk0p3";
     fsType = "ext4";
@@ -60,13 +32,9 @@
   };
 
   programs.u-boot-rockchip = {
-    enable = true;
-    package = board.u-boot;
     dtbPath = "/dtb/rk3506g-luckfox-lyra-nand.dtb";
     bootDevice = "/dev/mmcblk0";
   };
-
-  providers.bootloader.backend = "u-boot-rockchip";
 
   users.users.root = {
     password = "$6$cqZKvfwHmoQwVp28$61S9QwBIB3Q5c8mUJt6sZW2cejQIta86KxSeFhDDd1CukI45/Nq0VL7GMVVsqOh9sHySkok2K4M3XpY1i404b/";
@@ -85,7 +53,6 @@
   ];
 
   # Oneshot flash task — runs at boot, flashes ubi.img to NAND, reboots.
-  # The flash script is a finit task that runs once at runlevel 2.
   finit.tasks.flash-nand = {
     command = let
       flashScript = pkgs.writeShellApplication {

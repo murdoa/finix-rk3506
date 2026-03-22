@@ -50,38 +50,34 @@
         ./modules/cross-toplevel.nix
       ];
 
-      finixSystem = configModule:
+      finixSystem = configModules:
         pkgsCross.lib.evalModules {
           specialArgs = {
             inherit finixModules;
             finixSrc = finix;
-            # Board packages — configs use these instead of callPackage
-            board = {
-              inherit kernel u-boot m0-kmod m0-firmware;
-            };
+            board = { inherit kernel u-boot m0-kmod m0-firmware; };
           };
           modules = [
             finixModules.default
             { nixpkgs.pkgs = pkgsCross; }
-            configModule
-          ] ++ baseModules;
+          ] ++ configModules ++ baseModules;
         };
 
-      mkImage = builder: configModule: extraArgs:
+      mkImage = builder: configModules: extraArgs:
         pkgsNative.callPackage builder ({
           pkgs = pkgsCross;
           inherit pkgsNative;
           lib = pkgsCross.lib;
-          systemTopLevel = (finixSystem configModule).config.system.topLevel;
+          systemTopLevel = (finixSystem configModules).config.system.topLevel;
           u-boot-rk3506 = u-boot;
           inherit kernel;
         } // extraArgs);
     in
     {
       nixosConfigurations = {
-        rk3506 = finixSystem ./configuration.nix;
-        rk3506-nand = finixSystem ./configuration-nand.nix;
-        rk3506-nand-flasher = finixSystem ./configuration-nand-flasher.nix;
+        rk3506 = finixSystem [ ./configuration.nix ./profiles/sd.nix ];
+        rk3506-nand = finixSystem [ ./configuration.nix ./profiles/nand.nix ];
+        rk3506-nand-flasher = finixSystem [ ./configuration-nand-flasher.nix ];
       };
 
       packages.${buildSystem} = rec {
@@ -92,11 +88,11 @@
           inherit rkbin;
         };
 
-        sdImage = mkImage ./pkgs/sd-image.nix ./configuration.nix { };
+        sdImage = mkImage ./pkgs/sd-image.nix [ ./configuration.nix ./profiles/sd.nix ] { };
 
-        nandImage = mkImage ./pkgs/nand-image.nix ./configuration-nand.nix { };
+        nandImage = mkImage ./pkgs/nand-image.nix [ ./configuration.nix ./profiles/nand.nix ] { };
 
-        nandFlasherImage = mkImage ./pkgs/sd-nand-flasher-image.nix ./configuration-nand-flasher.nix {
+        nandFlasherImage = mkImage ./pkgs/sd-nand-flasher-image.nix [ ./configuration-nand-flasher.nix ] {
           ubiImage = "${nandImage}/ubi.img";
         };
       };

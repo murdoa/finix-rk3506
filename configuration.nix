@@ -1,65 +1,17 @@
-# finix system configuration for Luckfox Lyra (RK3506G2), SD card boot.
-{
-  config,
-  pkgs,
-  lib,
-  finixModules,
-  board,
-  ...
-}:
+# System configuration for Luckfox Lyra (RK3506G2).
+#
+# Hardware-specific boot/filesystem config lives in profiles/.
+# This file is the "what the system does" — services, users, firmware.
+{ pkgs, finixModules, board, ... }:
 {
   imports = [ finixModules.sysklogd ];
 
   networking.hostName = "finix-rk3506";
 
-  boot.kernelPackages = pkgs.linuxPackagesFor board.kernel;
-
-  boot.kernelParams = [
-    "console=ttyFIQ0"
-    "earlycon=uart8250,mmio32,0xff0a0000"
-    "rootwait"
-    "rw"
-  ];
-
-  # mkForce: override finix's x86-centric defaults (ahci, nvme, etc.)
-  boot.initrd.availableKernelModules = lib.mkForce [
-    "dw_mmc"
-    "dw_mmc_rockchip"
-    "mmc_block"
-    "ext4"
-    "spi_rockchip"
-    "spi_mem"
-    "mtd"
-    "dwc2"
-    "usbhid"
-    "hid_generic"
-  ];
-
-  boot.initrd.kernelModules = [ "mmc_block" "ext4" ];
-
+  # Cortex-M0 remoteproc
   boot.extraModulePackages = [ board.m0-kmod ];
   boot.kernelModules = [ "rk3506_rproc" ];
-
-  # GPT: part1=uboot (raw), part2=boot (FAT32), part3=rootfs (ext4)
-  fileSystems."/" = {
-    device = "/dev/mmcblk0p3";
-    fsType = "ext4";
-  };
-
-  fileSystems."/boot" = {
-    device = "/dev/mmcblk0p2";
-    fsType = "vfat";
-    options = [ "nofail" ];
-  };
-
-  programs.u-boot-rockchip = {
-    enable = true;
-    package = board.u-boot;
-    dtbPath = "/dtb/rk3506g-luckfox-lyra-sd.dtb";
-    bootDevice = "/dev/mmcblk0";
-  };
-
-  providers.bootloader.backend = "u-boot-rockchip";
+  hardware.firmware = [ board.m0-firmware ];
 
   users.users.root = {
     password = "$6$cqZKvfwHmoQwVp28$61S9QwBIB3Q5c8mUJt6sZW2cejQIta86KxSeFhDDd1CukI45/Nq0VL7GMVVsqOh9sHySkok2K4M3XpY1i404b/";
@@ -72,9 +24,4 @@
 
   services.mdevd.enable = true;
   services.sysklogd.enable = true;
-
-  # M0 firmware — ELF goes to /lib/firmware for remoteproc
-  hardware.firmware = [ board.m0-firmware ];
-
-  # Board-specific packages are in modules/minimal.nix
 }
