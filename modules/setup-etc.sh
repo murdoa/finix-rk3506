@@ -13,14 +13,11 @@ if [ -z "$etc" ]; then
     exit 1
 fi
 
-echo "setup-etc.sh: starting, etc=$etc" >&2
-
 # Ensure /tmp exists for mktemp (specialfs activation runs after us).
 mkdir -p /tmp
 
 # Atomically update /etc/static to point at current configuration's etc.
 ln -sfn "$etc" "$static"
-echo "setup-etc.sh: /etc/static -> $(readlink "$static")" >&2
 
 # Remove dangling symlinks that point to a previous /etc/static.
 find /etc -path /etc/nixos -prune -o -type l -print 2>/dev/null | while IFS= read -r link; do
@@ -112,7 +109,3 @@ rm -f "$clean_tmp" "$created_tmp"
 
 # Create /etc/NIXOS tag
 touch /etc/NIXOS
-
-echo "setup-etc.sh: done. /etc/fstab exists: $([ -e /etc/fstab ] && echo YES || echo NO)" >&2
-echo "setup-etc.sh: /etc/finit.conf exists: $([ -e /etc/finit.conf ] && echo YES || echo NO)" >&2
-ls -la /etc/fstab /etc/finit.conf /etc/static 2>&1 >&2 || true
