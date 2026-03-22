@@ -11,7 +11,7 @@
 #   - DTBs → single board only:                  ~20 MiB  (kernel postInstall)
 #   - System.map removal:                        ~2.7 MiB (kernel postInstall)
 #   - locale stripping:                          ~2.9 MiB
-{ pkgs, lib, ... }:
+{ config, pkgs, lib, ... }:
 
 {
   imports = [ ./etc-setup-bash.nix ];
@@ -27,26 +27,22 @@
   # gnupatch, coreutils-full (dupe of coreutils), etc.
   #
   # Stripped to bare minimum for an offline serial-only embedded system.
+  # Busybox replaces coreutils, findutils, procps, grep, sed, less, which,
+  # gzip, and provides ash as a lightweight shell.
   environment.systemPackages = lib.mkForce (with pkgs; [
-    # Shell essentials
-    bashInteractive
-    coreutils
-    findutils
-    gnugrep
-    gnused
-    less
-    which
+    # Busybox provides: sh, ls, cp, mv, rm, cat, echo, grep, sed, find,
+    # ps, top, free, mount, umount, dmesg, less, which, gzip, vi, etc.
+    busybox
 
-    # System
+    # Full bash for scripts that need it (finix activation uses bash)
+    bashInteractive
+
+    # util-linux is still needed — security wrappers reference mount/umount
+    # by full store path, and finit modules use agetty, etc.
     util-linux
-    procps
-    ncurses       # terminfo
-    getent
-    getconf
-    gzip
-    zstd
-    su
-    mkpasswd
+
+    # terminfo for serial console
+    ncurses
 
     # Board-specific
     mtdutils
@@ -66,6 +62,34 @@
 
   # No VGA/HDMI console — serial only. Kills kbd (2.5 MiB) and VESA blanking.
   hardware.console.enable = false;
+
+  # Replace GNU coreutils/findutils/grep in activation PATH with busybox.
+  # Finix hardcodes these in system.activation.path for the activate script.
+  # net-tools (hostname) and getent are also not needed on an offline board.
+  system.activation.path = lib.mkForce (with pkgs; map lib.getBin [
+    busybox         # coreutils, findutils, grep, sed, etc.
+    shadow          # needed by user activation
+    util-linux      # mount, mountpoint
+  ]);
+
+  # Replace finit's default PATH packages with busybox.
+  # Upstream defaults: coreutils, findutils, gnugrep, gnused, util-linux.mount
+  finit.path = lib.mkForce [
+    pkgs.busybox
+    config.finit.package  # finit itself needs to be in PATH
+    pkgs.util-linux.mount # required by finit on shutdown
+  ];
+
+  # Replace shebangCompatibility to use busybox env instead of coreutils (1.7 MiB).
+  system.activation.scripts.shebangCompatibility = lib.mkForce ''
+    mkdir -p -m 0755 /usr/bin /bin
+    ln -sfn ${pkgs.busybox}/bin/env /usr/bin/env
+    ln -sfn "${pkgs.bashInteractive}/bin/sh" /bin/sh
+  '';
+
+  # Replace procps sysctl (2.8 MiB) with busybox sysctl.
+  finit.tasks.sysctl.command = lib.mkForce
+    "${pkgs.busybox}/bin/sysctl -p ${config.environment.etc."sysctl.d/60-finix.conf".source}";
 
   # The shadow module hardcodes pam_xauth in su's PAM config, pulling in
   # xauth → libX11 → libxcb (~4.2 MiB of X11 on a headless board).
