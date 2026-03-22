@@ -24,9 +24,9 @@ nix build .#packages.x86_64-linux.sdImage
 nix run .#flash
 
 # Or build individual pieces
-nix build .#packages.x86_64-linux.linux-rockchip-rk3506
-nix build .#packages.x86_64-linux.u-boot-rk3506
-nix build .#packages.x86_64-linux.rkbin
+nix build .#linux-rockchip-rk3506
+nix build .#u-boot-rk3506
+nix build .#rkbin
 ```
 
 ## Hardware
