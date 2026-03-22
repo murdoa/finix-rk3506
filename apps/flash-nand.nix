@@ -81,6 +81,9 @@ mkApp "flash-nand" ''
     sleep 1
   fi
 
+  echo ">>> Writing GPT (primary) @ sector 0..."
+  rkdeveloptool wl 0 "$NAND/gpt-primary.img"
+
   echo ">>> Writing idblock @ sector $IDBLOCK_SECTOR..."
   rkdeveloptool wl $IDBLOCK_SECTOR "$NAND/idblock.img"
 
@@ -92,6 +95,9 @@ mkApp "flash-nand" ''
 
   echo ">>> Writing ubi.img @ sector $UBI_SECTOR..."
   rkdeveloptool wl $UBI_SECTOR "$NAND/ubi.img"
+
+  echo ">>> Writing GPT (backup) @ sector $GPT_BACKUP_SECTOR..."
+  rkdeveloptool wl $GPT_BACKUP_SECTOR "$NAND/gpt-backup.img"
 
   echo ">>> Resetting device..."
   rkdeveloptool rd

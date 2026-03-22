@@ -7,12 +7,12 @@
  *   - UBI/UBIFS rootfs on the last partition
  *   - SD card still enabled (useful for recovery/updates)
  *
- * Flash layout (128 MiB SPI NAND):
- *   0x000000 -  0x040000  (256K)  env — reserved
- *   0x040000 -  0x080000  (256K)  idblock — BootROM loads DDR init + SPL
- *   0x080000 -  0x400000  (3.5M)  u-boot.itb — SPL loads U-Boot FIT
- *   0x400000 - 0x1800000  (20M)   boot — extlinux.conf, kernel, initrd, DTB
- *   0x1800000 - end       (~104M) ubi — UBIFS rootfs (LZO compressed)
+ * Flash layout (256 MiB SPI NAND, Winbond W25N02KV):
+ *   0x000000  -  0x040000  (256K)  env — reserved
+ *   0x040000  -  0x080000  (256K)  idblock — BootROM loads DDR init + SPL
+ *   0x080000  -  0x400000  (3.5M)  u-boot.itb — SPL loads U-Boot FIT
+ *   0x400000  - 0x1800000  (20M)   boot — extlinux.conf, kernel, initrd, DTB
+ *   0x1800000 - 0x10000000 (232M)  ubi — UBIFS rootfs (LZO compressed)
  */
 
 /dts-v1/;
@@ -137,7 +137,7 @@
 
 			partition@1800000 {
 				label = "ubi";
-				reg = <0x1800000 0x6800000>;
+				reg = <0x1800000 0xe800000>;
 			};
 		};
 	};

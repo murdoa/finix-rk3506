@@ -48,6 +48,14 @@ stdenv.mkDerivation {
     # RKIMG_BOOTCOMMAND (boot_fit → boot_android — never runs extlinux).
     sed -i 's|#define CONFIG_BOOTCOMMAND RKIMG_BOOTCOMMAND|#define CONFIG_BOOTCOMMAND "run distro_bootcmd"|' \
       include/configs/evb_rk3506.h
+
+    # rk3506_common.h defines CONFIG_EXTRA_ENV_SETTINGS but omits
+    # BOOTENV_SHARED_MTD (the "mtd_boot=" script). Without it, distro
+    # boot's bootcmd_mtd* targets try to "run mtd_boot" and fail with
+    # "mtd_boot not defined". rk3588_common.h gets this right — we
+    # replicate that fix here by prepending BOOTENV_SHARED_MTD.
+    sed -i 's|#define CONFIG_EXTRA_ENV_SETTINGS \\|#define CONFIG_EXTRA_ENV_SETTINGS \\\n\tBOOTENV_SHARED_MTD \\|' \
+      include/configs/rk3506_common.h
   '';
 
   configurePhase = ''

@@ -3,21 +3,21 @@
 # Produces individual flash components for partition-based flashing
 # via rkdeveloptool. Matches the Rockchip/Luckfox NAND partition layout.
 #
-# Flash layout (128 MiB SPI NAND):
-#   Offset 0        : (reserved / env)
+# Flash layout (256 MiB SPI NAND, Winbond W25N02KV):
+#   Offset 0        : GPT (protective MBR + GPT header + entries)
 #   Offset 256K     : idblock.img (DDR init + U-Boot SPL, IDB format)
 #   Offset 512K     : u-boot.itb (FIT: U-Boot + OP-TEE + DTB)
-#   Offset 1M       : boot partition (FAT16: kernel, initrd, DTB, extlinux)
-#   Offset 8M       : UBI rootfs (UBIFS, LZO compressed)
+#   Offset 4M       : boot partition (FAT16: kernel, initrd, DTB, extlinux)
+#   Offset 24M      : UBI rootfs (UBIFS, LZO compressed)
 #
-# SPI NAND geometry (typical 128 MiB):
+# SPI NAND geometry (Winbond W25N02KV, 2 Gbit):
 #   Page size:     2048 bytes
-#   OOB per page:  64 bytes
+#   OOB per page:  128 bytes
 #   Pages/block:   64
 #   Block size:    128 KiB (PEB = 131072)
 #   LEB size:      126976 bytes (PEB - 2 pages overhead for UBI)
-#   Total blocks:  1024
-#   Total size:    128 MiB (134217728 bytes)
+#   Total blocks:  2048
+#   Total size:    256 MiB (268435456 bytes)
 {
   pkgs,
   pkgsNative,
@@ -39,7 +39,7 @@ let
     "earlycon=uart8250,mmio32,0xff0a0000"
     "rootwait"
     "rw"
-    "ubi.mtd=4"
+    "ubi.mtd=ubi"
     "root=ubi0:rootfs"
     "rootfstype=ubifs"
   ];
@@ -59,9 +59,16 @@ let
   bootSectors = bootSizeMB * 1024 * 1024 / 512;
   bootEndSector = bootStartSector + bootSectors - 1;
   ubiStartSector = 49152;       # 24M
-  totalFlashBytes = 128 * 1024 * 1024;
-  totalSectors = totalFlashBytes / 512;
-  ubiEndSector = totalSectors - 1;
+  totalFlashBytes = 256 * 1024 * 1024;  # W25N02KV = 2 Gbit = 256 MiB
+  # mtd_blk reserves the last NANDDEV_BBT_SCAN_MAXBLOCKS (4) erase blocks
+  # for bad block table scanning. The virtual block device is smaller than
+  # raw flash: 524288 - (4 * 256) = 523264 sectors.
+  # GPT must match the exported LBA count, not raw flash capacity.
+  bbtReservedBlocks = 4;
+  bbtReservedSectors = bbtReservedBlocks * blockSize / 512;  # 1024
+  totalSectors = totalFlashBytes / 512 - bbtReservedSectors;  # 523264
+  # Reserve last 33 sectors for backup GPT
+  ubiEndSector = totalSectors - 33 - 1;
 
   # UBI partition size
   ubiPartBytes = (ubiEndSector - ubiStartSector + 1) * 512;
@@ -83,6 +90,7 @@ pkgsNative.stdenv.mkDerivation {
     util-linux
     coreutils
     perl
+    gptfdisk
   ];
 
   buildCommand = ''
@@ -176,6 +184,33 @@ pkgsNative.stdenv.mkDerivation {
 
     echo "  Boot partition: $(du -sh boot.img | cut -f1)"
 
+    # --- GPT for SPI NAND ---
+    # U-Boot's mtd_blk layer presents SPI NAND as a block device.
+    # distro_bootcmd → mtd_boot → scan_dev_for_boot_part needs a GPT
+    # to discover the boot partition and run extlinux from it.
+    echo ">>> Generating GPT image..."
+    totalSectors=${toString totalSectors}
+    truncate -s $(( totalSectors * 512 )) gpt.img
+
+    # --set-alignment=1: disable sgdisk's default 2048-sector alignment.
+    # SPI NAND offsets are fixed by Rockchip conventions, not disk geometry.
+    sgdisk --set-alignment=1 \
+      --new=1:${toString ubootStartSector}:${toString (bootStartSector - 1)} --change-name=1:uboot --typecode=1:8300 \
+      --new=2:${toString bootStartSector}:${toString bootEndSector} --change-name=2:boot --typecode=2:8300 --attributes=2:set:2 \
+      --new=3:${toString ubiStartSector}:${toString ubiEndSector} --change-name=3:ubi --typecode=3:8300 \
+      gpt.img
+
+    echo "  GPT partition table:"
+    sgdisk --print gpt.img
+
+    # Extract just the GPT header area (protective MBR + GPT header + entries).
+    # Sectors 0..33 = 17 KiB. We write this to sector 0 on NAND.
+    dd if=gpt.img of=gpt-primary.img bs=512 count=34
+
+    # Extract the backup GPT (last 33 sectors of the device).
+    backupStart=$(( totalSectors - 33 ))
+    dd if=gpt.img of=gpt-backup.img bs=512 skip=$backupStart count=33
+
     # --- Output individual components ---
     echo ">>> Copying flash components..."
 
@@ -184,6 +219,10 @@ pkgsNative.stdenv.mkDerivation {
     cp ${u-boot-rk3506}/bin/idblock.img  "$out/"   # IDB format for NAND
     cp ${u-boot-rk3506}/bin/idbloader.img "$out/"  # rksd format for SD
     cp ${u-boot-rk3506}/bin/u-boot.itb   "$out/"
+
+    # GPT images
+    cp gpt-primary.img "$out/"
+    cp gpt-backup.img  "$out/"
 
     # Filesystem images
     cp boot.img "$out/"
@@ -195,18 +234,22 @@ pkgsNative.stdenv.mkDerivation {
     UBOOT_SECTOR=${toString ubootStartSector}
     BOOT_SECTOR=${toString bootStartSector}
     UBI_SECTOR=${toString ubiStartSector}
+    GPT_BACKUP_SECTOR=BACKUP_PLACEHOLDER
     LAYOUT
 
     sed -i 's/^    //' "$out/layout.env"
+    sed -i "s/BACKUP_PLACEHOLDER/$backupStart/" "$out/layout.env"
 
     echo ""
     echo "=== NAND flash components built ==="
     echo "  Flash with: nix run .#flash-nand"
     echo ""
     echo "  Layout:"
+    echo "    gpt          @ sector 0"
     echo "    idblock.img  @ sector ${toString idblockStartSector} ($(( ${toString idblockStartSector} * 512 / 1024 ))K)"
     echo "    u-boot.itb   @ sector ${toString ubootStartSector} ($(( ${toString ubootStartSector} * 512 / 1024 ))K)"
     echo "    boot.img     @ sector ${toString bootStartSector} ($(( ${toString bootStartSector} * 512 / 1024 ))K)"
     echo "    ubi.img      @ sector ${toString ubiStartSector} ($(( ${toString ubiStartSector} * 512 / 1024 ))K)"
+    echo "    gpt-backup   @ sector $backupStart"
   '';
 }

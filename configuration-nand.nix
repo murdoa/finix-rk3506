@@ -3,11 +3,12 @@
 # Boot flow: BootROM → idbloader (raw) → U-Boot (raw) → extlinux.conf
 #            (mtd_blk boot partition) → kernel → ubi.mtd=4 → UBIFS rootfs
 #
-# Flash layout (128 MiB SPI NAND):
-#   mtd0: idbloader  (0x000000 - 0x400000,  4M)
-#   mtd1: uboot      (0x400000 - 0x800000,  4M)
-#   mtd2: boot       (0x800000 - 0x1000000, 8M)  — extlinux.conf, kernel, initrd, DTB
-#   mtd3: ubi        (0x1000000 - end, ~112M)     — UBIFS rootfs (LZO)
+# Flash layout (256 MiB SPI NAND, Winbond W25N02KV):
+#   mtd0: env        (0x000000  - 0x040000,   256K)
+#   mtd1: idblock    (0x040000  - 0x080000,   256K)
+#   mtd2: uboot      (0x080000  - 0x400000,   3.5M)
+#   mtd3: boot       (0x400000  - 0x1800000,  20M) — extlinux, kernel, initrd, DTB
+#   mtd4: ubi        (0x1800000 - 0x10000000, 232M) — UBIFS rootfs (LZO)
 {
   config,
   pkgs,
@@ -40,9 +41,10 @@ in
     "earlycon=uart8250,mmio32,0xff0a0000"
     "rootwait"
     "rw"
-    # Auto-attach UBI to mtd3 (the 'ubi' partition from DT fixed-partitions).
-    # The kernel's MTD_UBI module handles this before rootfs mount.
-    "ubi.mtd=4"
+    # Auto-attach UBI to the partition named "ubi".
+    # Using name instead of index because U-Boot injects cmdlinepart mtdparts
+    # which may produce different numbering than the DTS fixed-partitions.
+    "ubi.mtd=ubi"
   ];
 
   # mkForce: override finix's x86-centric defaults (ahci, nvme, etc.)
