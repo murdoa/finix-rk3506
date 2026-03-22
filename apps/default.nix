@@ -13,6 +13,5 @@ in
 {
   flash = import ./flash.nix { inherit pkgs mkApp sdCardById sdImage; };
   flash-nand = import ./flash-nand.nix { inherit pkgs mkApp nandImage usbplug rkbin; };
-  flash-nand-bootloader = import ./flash-nand-bootloader.nix { inherit pkgs mkApp nandImage rkbin; };
   flash-nand-sd = import ./flash-nand-sd.nix { inherit pkgs mkApp sdCardById nandFlasherImage; };
 }
