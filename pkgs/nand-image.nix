@@ -1,7 +1,8 @@
-# Bootable SPI NAND components for Luckfox Lyra (RK3506G2).
+# Bootable SPI NAND image for Luckfox Lyra (RK3506G2).
 #
-# Produces individual flash components for partition-based flashing
-# via rkdeveloptool. Matches the Rockchip/Luckfox NAND partition layout.
+# Produces a single contiguous nand.img for flashing via the open-source
+# U-Boot usbplug: rkdeveloptool db download.bin && rkdeveloptool wl 0 nand.img
+# Also outputs ubi.img for the SD card flasher fallback.
 #
 # Flash layout (256 MiB SPI NAND, Winbond W25N02KV):
 #   Offset 0        : GPT (protective MBR + GPT header + entries)
@@ -210,18 +211,6 @@ EXTEOF
     backupStart=$(( totalSectors - 33 ))
     dd if=gpt.img of=gpt-backup.img bs=512 skip=$backupStart count=33
 
-    # --- parameter.txt for upgrade_tool di commands ---
-    cat > parameter.txt << 'PARAMEOF'
-FIRMWARE_VER:8.1
-MACHINE_MODEL:RK3506
-TYPE: GPT
-GROW_ALIGN: 0
-CMDLINE:mtdparts=:0x00001c00@0x00000400(uboot),0x0000a000@0x00002000(boot),-@0x0000c000(rootfs:grow)
-PARAMEOF
-
-    echo "  parameter.txt:"
-    cat parameter.txt
-
     # --- Assemble single contiguous NAND image ---
     echo ">>> Assembling full NAND image..."
     truncate -s $(( totalSectors * 512 )) nand.img
@@ -247,51 +236,18 @@ PARAMEOF
     echo "  Full NAND image: $(du -sh nand.img | cut -f1)"
 
     # --- Output ---
-    echo ">>> Copying flash components..."
+    echo ">>> Copying flash artifacts..."
 
-    # Full contiguous image for single-command flash
+    # Full contiguous image for: rkdeveloptool wl 0 nand.img
     cp nand.img "$out/"
 
-    # Loader for rkdeveloptool db / upgrade_tool ul
-    cp ${u-boot-rk3506}/bin/download.bin "$out/"
-
-    # Individual components (for SD flasher and debugging)
-    cp ${u-boot-rk3506}/bin/idblock.img  "$out/"
-    cp ${u-boot-rk3506}/bin/idbloader.img "$out/"
-    cp ${u-boot-rk3506}/bin/u-boot.itb   "$out/"
-    cp gpt-primary.img "$out/"
-    cp gpt-backup.img  "$out/"
-    cp boot.img "$out/"
-    cp ubi.img  "$out/"
-
-    # For upgrade_tool di commands — named to match parameter.txt partitions
-    cp ${u-boot-rk3506}/bin/u-boot.itb "$out/uboot.img"
-    cp ubi.img "$out/rootfs.img"
-    cp parameter.txt "$out/"
-
-    # Write a layout metadata file for the flash script
-    cat > layout.env << LAYOUT
-IDBLOCK_SECTOR=${toString idblockStartSector}
-UBOOT_SECTOR=${toString ubootStartSector}
-BOOT_SECTOR=${toString bootStartSector}
-UBI_SECTOR=${toString ubiStartSector}
-GPT_BACKUP_SECTOR=$backupStart
-TOTAL_SECTORS=$totalSectors
-LAYOUT
-    cp layout.env "$out/"
+    # UBI image for SD card flasher fallback
+    cp ubi.img "$out/"
 
     echo ""
-    echo "=== NAND flash components built ==="
+    echo "=== NAND image built ==="
+    echo "  nand.img: $(du -sh nand.img | cut -f1)"
+    echo "  ubi.img:  $(du -sh ubi.img | cut -f1)"
     echo "  Flash with: nix run .#flash-nand"
-    echo ""
-    echo "  Layout:"
-    echo "    gpt          @ sector 0"
-    echo "    idblock.img  @ sector ${toString idblockStartSector} ($(( ${toString idblockStartSector} * 512 / 1024 ))K)"
-    echo "    u-boot.itb   @ sector ${toString ubootStartSector} ($(( ${toString ubootStartSector} * 512 / 1024 ))K)"
-    echo "    boot.img     @ sector ${toString bootStartSector} ($(( ${toString bootStartSector} * 512 / 1024 ))K)"
-    echo "    ubi.img      @ sector ${toString ubiStartSector} ($(( ${toString ubiStartSector} * 512 / 1024 ))K)"
-    echo "    gpt-backup   @ sector $backupStart"
-    echo ""
-    echo "  Full image:    nand.img ($(du -sh nand.img | cut -f1))"
   '';
 }
