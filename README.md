@@ -87,9 +87,15 @@ The firmware auto-loads at boot — the `rk3506_rproc` module is built, installe
 
 This boots on real hardware. The system comes up with finit as PID 1, mdevd for device management, serial console on the debug UART, and the M0 running firmware alongside Linux. Both SD card and SPI NAND boot paths are working and hardware-verified.
 
+Known issues:
+
+- **`rkdeveloptool rd` (reset device) bricks the board** — the CRU soft reset glitches the SFC controller, either erasing SPI NAND or leaving DDR in a bad state. The flash script does not issue `rd`; power cycle the board manually after flashing.
+- **`rkdeveloptool rl` (read LBA) returns incorrect data** — reads back mostly zeroes for regions that contain valid data. Likely caused by our usbplug's bad block bypass patches interacting with the MTD read path. Flash writes are unaffected. Under investigation.
+
 Remaining work:
 
 - [ ] Shared memory / mailbox between A7 and M0
+- [ ] Fix usbplug `rl` read path for flash verification / debugging
 
 
 ## Attributions
