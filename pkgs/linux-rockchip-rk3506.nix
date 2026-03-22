@@ -48,6 +48,10 @@
 
     OVERLAY_FS = module;
 
+    # Remoteproc framework — needed for M0 core driver
+    REMOTEPROC = yes;
+    REMOTEPROC_CDEV = yes;
+
     # Disable vendor drivers that don't compile with GCC 14+.
     # RK3506 has no GPU; these are for other SoCs in the shared defconfig.
     MALI400 = no;

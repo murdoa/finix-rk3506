@@ -11,6 +11,11 @@ let
   u-boot-rk3506 = pkgs.callPackage ./pkgs/u-boot-rk3506.nix {
     rkbin = pkgs.callPackage ./pkgs/rkbin.nix { };
   };
+  m0-kmod = pkgs.callPackage ./pkgs/m0-kmod.nix {
+    kernel = linux-rockchip-rk3506;
+  };
+  # Switch to m0-firmware-bin for our own firmware once tested
+  m0-firmware = pkgs.buildPackages.callPackage ./pkgs/m0-test-firmware.nix { };
 in
 {
   imports = [ finixModules.sysklogd ];
@@ -41,6 +46,8 @@ in
   ];
 
   boot.initrd.kernelModules = [ "mmc_block" "ext4" ];
+
+  boot.extraModulePackages = [ m0-kmod ];
 
   # GPT: part1=uboot (raw), part2=boot (FAT32), part3=rootfs (ext4)
   fileSystems."/" = {
@@ -78,6 +85,9 @@ in
 
   services.mdevd.enable = true;
   services.sysklogd.enable = true;
+
+  # M0 firmware — ELF goes to /lib/firmware for remoteproc
+  hardware.firmware = [ m0-firmware ];
 
   environment.systemPackages = with pkgs; [
     btop
