@@ -9,9 +9,10 @@
 
 mkApp "flash-nand" ''
   set -euo pipefail
+  export PATH="${pkgs.lib.makeBinPath [ pkgs.rkdeveloptool pkgs.coreutils ]}:$PATH"
 
   if [[ "''${1:-}" == "--help" || "''${1:-}" == "-h" ]]; then
-    echo "Usage: nix run .#flash-nand [--no-erase]"
+    echo "Usage: nix run .#flash-nand [--erase-flash]"
     echo ""
     echo "Flash full SPI NAND image on Luckfox Lyra via rkdeveloptool."
     echo "Uses open-source U-Boot usbplug for correct SPI NAND writes."
@@ -22,7 +23,7 @@ mkApp "flash-nand" ''
     echo "  3. Release BOOT button"
     echo ""
     echo "Options:"
-    echo "  --no-erase   Skip full-chip erase before writing"
+    echo "  --erase-flash   Erase full chip before writing"
     echo ""
     exit 0
   fi
@@ -82,7 +83,7 @@ mkApp "flash-nand" ''
   rkdeveloptool db "$DB_LOADER"
   sleep 3
 
-  if [[ "''${1:-}" != "--no-erase" ]]; then
+  if [[ "''${1:-}" == "--erase-flash" ]]; then
     echo ">>> Erasing flash..."
     rkdeveloptool ef
     sleep 1
@@ -91,9 +92,6 @@ mkApp "flash-nand" ''
   echo ">>> Writing nand.img @ sector 0..."
   rkdeveloptool wl 0 "$NAND_IMG"
 
-  echo ">>> Resetting device..."
-  rkdeveloptool rd
-
   echo ""
-  echo "Done! The Luckfox Lyra should boot from SPI NAND."
+  echo "Done! Power cycle the board to boot from SPI NAND."
 ''
