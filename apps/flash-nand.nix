@@ -44,8 +44,19 @@ mkApp "flash-nand" ''
     exit 1
   fi
 
-  # Check for Maskrom device
-  if ! rkdeveloptool ld 2>/dev/null | grep -qi 'maskrom\|loader'; then
+  # Check for device and ensure Maskrom mode
+  LD_OUTPUT=$(rkdeveloptool ld 2>/dev/null || true)
+  if echo "$LD_OUTPUT" | grep -qi 'loader'; then
+    echo "Device found in Loader mode — resetting to Maskrom..."
+    rkdeveloptool rd 3
+    sleep 3
+    LD_OUTPUT=$(rkdeveloptool ld 2>/dev/null || true)
+    if ! echo "$LD_OUTPUT" | grep -qi 'maskrom'; then
+      echo "ERROR: Device did not re-enumerate in Maskrom mode after reset."
+      echo "Try manually: hold BOOT, reconnect USB-C, release BOOT."
+      exit 1
+    fi
+  elif ! echo "$LD_OUTPUT" | grep -qi 'maskrom'; then
     echo "ERROR: No device found in Maskrom/Loader mode."
     echo ""
     echo "Enter Maskrom mode:"
