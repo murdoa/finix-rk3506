@@ -37,6 +37,31 @@
             makeModulesClosure = x:
               prev.makeModulesClosure (x // { allowMissing = true; });
           })
+
+          # Fix: security wrappers (built with pkgsStatic/musl) propagate
+          # linuxHeaders into their runtime closure via propagated-build-inputs.
+          # They're statically linked — they don't need headers at runtime.
+          # This saves ~16.6 MiB. Part of the minimal.nix closure reduction effort.
+          # Upstream should fix wrapper.nix to use nativeBuildInputs for linuxHeaders.
+          (final: prev: {
+            pkgsStatic = prev.pkgsStatic.extend (sfinal: sprev: let
+              origCallPackage = sprev.callPackage;
+              lib = nixpkgs.lib;
+            in {
+              callPackage = fn: args: let
+                result = origCallPackage fn args;
+                name = result.name or "";
+              in
+                if lib.hasPrefix "security-wrapper-" name then
+                  result.overrideAttrs (old: {
+                    postFixup = (old.postFixup or "") + ''
+                      rm -f $out/nix-support/propagated-build-inputs
+                    '';
+                  })
+                else
+                  result;
+            });
+          })
         ];
       };
 
@@ -67,6 +92,7 @@
       nixosConfigurations.rk3506 = finixSystem {
         modules = [
           ./configuration.nix
+          ./modules/minimal.nix
           ./modules/u-boot-rockchip
           ./modules/cross-toplevel.nix
         ];
@@ -88,6 +114,7 @@
           systemTopLevel = (finixSystem {
             modules = [
               ./configuration.nix
+              ./modules/minimal.nix
               ./modules/u-boot-rockchip
               ./modules/cross-toplevel.nix
             ];

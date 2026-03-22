@@ -83,4 +83,13 @@
     sed -i '/rk3506g-demo-display-control.dtb/a\\trk3506g-luckfox-lyra-sd.dtb \\' \
       arch/arm/boot/dts/Makefile
   '';
+
+  # Strip DTBs to only our board (saves ~20 MiB) and remove System.map (2.7 MiB)
+  postInstall = (old.postInstall or "") + ''
+    if [ -d $out/dtbs ]; then
+      find $out/dtbs -name '*.dtb' ! -name 'rk3506g-luckfox-lyra-sd.dtb' -delete
+      find $out/dtbs -type d -empty -delete
+    fi
+    rm -f $out/System.map
+  '';
 })

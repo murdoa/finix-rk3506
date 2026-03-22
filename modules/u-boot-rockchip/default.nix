@@ -123,9 +123,10 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = [
-      cfg.package
-    ];
+    # U-Boot binaries are referenced directly by the install script via
+    # cfg.package — no need to put them in systemPackages. Doing so leaks
+    # the entire cross-toolchain closure (including build-host glibc) into
+    # the target image.
 
     # NOTE: extlinux.conf is NOT placed in /etc — it lives on the boot
     # partition and is written by the install hook at switch-to-configuration

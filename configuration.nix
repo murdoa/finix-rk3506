@@ -79,20 +79,11 @@ in
     nowait = true;
   };
 
-  # xdg-desktop-portal provides D-Bus interfaces for sandboxed apps (file
-  # choosers, screen sharing, etc). Pulled in by finix defaults; not applicable here.
-  xdg.portal.enable = false;
-
   services.mdevd.enable = true;
   services.sysklogd.enable = true;
 
   # M0 firmware — ELF goes to /lib/firmware for remoteproc
   hardware.firmware = [ m0-firmware ];
 
-  environment.systemPackages = with pkgs; [
-    btop
-    util-linux
-    iproute2
-    mtdutils
-  ];
+  # Board-specific packages are in modules/minimal.nix
 }
