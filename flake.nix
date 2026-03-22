@@ -211,7 +211,6 @@
         sdImage = self.packages.${buildSystem}.sdImage;
         nandImage = self.packages.${buildSystem}.nandImage;
         nandFlasherImage = self.packages.${buildSystem}.nandFlasherImage;
-        rkbin = self.packages.${buildSystem}.rkbin;
         usbplug = self.packages.${buildSystem}.u-boot-usbplug-rk3506;
       };
     };

@@ -5,7 +5,7 @@
 # The U-Boot usbplug uses the same MTD stack as the kernel — correct ECC.
 #
 # Usage: nix run .#flash-nand
-{ pkgs, mkApp, nandImage, usbplug, rkbin }:
+{ pkgs, mkApp, nandImage, usbplug, ... }:
 
 mkApp "flash-nand" ''
   set -euo pipefail

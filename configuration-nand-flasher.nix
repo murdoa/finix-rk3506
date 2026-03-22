@@ -9,9 +9,10 @@
 # SD image builder (sd-nand-flasher-image.nix).
 #
 # Usage:
-#   1. Flash bootloader to NAND: nix run .#flash-nand-bootloader
-#   2. Write this SD image:      nix run .#flash-nand-sd
-#   3. Insert SD, power on — board boots SD, flashes NAND, reboots into NAND
+#   1. Write this SD image:      nix run .#flash-nand-sd
+#   2. Insert SD, power on — board boots SD, flashes NAND UBI, reboots
+#
+# This is a fallback. Primary path: nix run .#flash-nand (usbplug + rkdeveloptool)
 {
   config,
   pkgs,

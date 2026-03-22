@@ -4,9 +4,11 @@
 # kernel MTD stack, bypassing the buggy Rockchip Loader firmware.
 #
 # Workflow:
-#   1. nix run .#flash-nand-bootloader  — flash bootloader via rkdeveloptool
-#   2. nix run .#flash-nand-sd          — write this SD image
-#   3. Insert SD, power on — auto-flashes NAND, reboots into NAND
+#   1. nix run .#flash-nand-sd          — write this SD image
+#   2. Insert SD, power on — auto-flashes NAND UBI partition, reboots
+#
+# Primary flash path is nix run .#flash-nand (usbplug + rkdeveloptool).
+# This SD flasher is a fallback for writing UBI only.
 #
 # Usage: nix run .#flash-nand-sd
 { pkgs, mkApp, sdCardById, nandFlasherImage }:
@@ -25,11 +27,12 @@ mkApp "flash-nand-sd" ''
     echo "Writes to: ${sdCardById}"
     echo ""
     echo "Full workflow:"
-    echo "  1. nix run .#flash-nand-bootloader  (via USB/rkdeveloptool)"
-    echo "  2. nix run .#flash-nand-sd          (write this SD card)"
-    echo "  3. Insert SD into board, power on"
-    echo "  4. Wait for auto-flash + reboot"
-    echo "  5. Remove SD card — board boots from NAND"
+    echo "  1. nix run .#flash-nand-sd          (write this SD card)"
+    echo "  2. Insert SD into board, power on"
+    echo "  3. Wait for auto-flash + reboot"
+    echo "  4. Remove SD card — board boots from NAND"
+    echo ""
+    echo "Primary flash path: nix run .#flash-nand (full image via USB)"
     exit 0
   fi
 
