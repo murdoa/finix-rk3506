@@ -1,19 +1,14 @@
-# Bootable SPI NAND image for Luckfox Lyra (RK3506G2).
+# Bootable SPI NAND components for Luckfox Lyra (RK3506G2).
 #
-# Produces a raw image that can be flashed via rkdeveloptool in Maskrom mode.
-# The image contains:
-#   1. idbloader.img at sector 64 (32KB) — BootROM loads DDR init + SPL
-#   2. GPT partition table at sector 0
-#   3. u-boot.itb in the "uboot" GPT partition
-#   4. FAT16 boot partition with extlinux.conf, kernel, initrd, DTB
-#   5. UBI image with UBIFS rootfs (LZO compressed)
+# Produces individual flash components for partition-based flashing
+# via rkdeveloptool. Matches the Rockchip/Luckfox NAND partition layout.
 #
-# Flash layout (128 MiB / 0x8000000):
-#   Sector 0      : GPT protective MBR + header
-#   Sector 64     : idbloader.img (overlaps GPT area, BootROM reads raw)
-#   Sector 8192   : u-boot.itb (4 MiB partition "uboot")
-#   Sector 16384  : boot partition (24 MiB, FAT16, "boot", bootable)
-#   Sector 65536  : UBI partition (rest, ~96 MiB)
+# Flash layout (128 MiB SPI NAND):
+#   Offset 0        : (reserved / env)
+#   Offset 256K     : idblock.img (DDR init + U-Boot SPL, IDB format)
+#   Offset 512K     : u-boot.itb (FIT: U-Boot + OP-TEE + DTB)
+#   Offset 1M       : boot partition (FAT16: kernel, initrd, DTB, extlinux)
+#   Offset 8M       : UBI rootfs (UBIFS, LZO compressed)
 #
 # SPI NAND geometry (typical 128 MiB):
 #   Page size:     2048 bytes
@@ -44,7 +39,7 @@ let
     "earlycon=uart8250,mmio32,0xff0a0000"
     "rootwait"
     "rw"
-    "ubi.mtd=3"
+    "ubi.mtd=4"
     "root=ubi0:rootfs"
     "rootfstype=ubifs"
   ];
@@ -53,27 +48,25 @@ let
   pageSize = 2048;
   pagesPerBlock = 64;
   blockSize = pageSize * pagesPerBlock;  # 128 KiB = 131072
-  # UBI overhead: 2 pages per PEB (for EC and VID headers)
   lebSize = blockSize - 2 * pageSize;    # 126976 bytes
 
-  # Flash layout (in 512-byte sectors)
-  ubootStartSector = 8192;     # 4 MiB
-  bootStartSector = 16384;     # 8 MiB
-  bootSizeMB = 24;
-  bootSectors = bootSizeMB * 1024 * 1024 / 512;   # 49152 sectors
+  # Partition layout (in 512-byte sectors)
+  # Matches Rockchip/Luckfox convention for SPI NAND
+  idblockStartSector = 512;     # 256K — BootROM scans for IDB here
+  ubootStartSector = 1024;      # 512K
+  bootStartSector = 8192;       # 4M (u-boot.itb is ~860K, leave room)
+  bootSizeMB = 20;              # 20 MiB (boot ends at 24M)
+  bootSectors = bootSizeMB * 1024 * 1024 / 512;
   bootEndSector = bootStartSector + bootSectors - 1;
-  ubiStartSector = bootEndSector + 1;  # 32 MiB
-  totalFlashBytes = 128 * 1024 * 1024;  # 128 MiB
+  ubiStartSector = 49152;       # 24M
+  totalFlashBytes = 128 * 1024 * 1024;
   totalSectors = totalFlashBytes / 512;
-  ubiEndSector = totalSectors - 34;     # Leave room for backup GPT
+  ubiEndSector = totalSectors - 1;
 
-  # UBI partition size in bytes
+  # UBI partition size
   ubiPartBytes = (ubiEndSector - ubiStartSector + 1) * 512;
-  # Number of PEBs available for UBI
   ubiPebCount = ubiPartBytes / blockSize;
-  # Reserve PEBs for UBI overhead (typically 4 + ~1% for wear leveling)
   ubiOverheadPebs = 4 + ubiPebCount / 100 + 1;
-  # Max LEBs available for UBIFS
   maxLebCount = ubiPebCount - ubiOverheadPebs;
 in
 pkgsNative.stdenv.mkDerivation {
@@ -87,7 +80,6 @@ pkgsNative.stdenv.mkDerivation {
     mtdutils
     libfaketime
     fakeroot
-    gptfdisk
     util-linux
     coreutils
     perl
@@ -96,10 +88,9 @@ pkgsNative.stdenv.mkDerivation {
   buildCommand = ''
     set -euo pipefail
 
-    img="$out/finix-rk3506-nand.img"
     mkdir -p "$out"
 
-    echo "=== Building SPI NAND image ==="
+    echo "=== Building SPI NAND flash components ==="
     echo "  Flash size: ${toString totalFlashBytes} bytes (${toString (totalFlashBytes / 1024 / 1024)} MiB)"
     echo "  UBI partition: ${toString ubiPartBytes} bytes (${toString (ubiPartBytes / 1024 / 1024)} MiB)"
     echo "  PEB size: ${toString blockSize}, LEB size: ${toString lebSize}"
@@ -158,7 +149,7 @@ pkgsNative.stdenv.mkDerivation {
     echo ">>> Building boot partition..."
     bootSizeBytes=$((${toString bootSectors} * 512))
     truncate -s $bootSizeBytes boot.img
-    mkfs.vfat -F 16 -n FINIX_BOOT boot.img
+    mkfs.vfat -n FINIX_BOOT boot.img
 
     mmd -i boot.img ::extlinux
     mmd -i boot.img ::dtb
@@ -176,7 +167,6 @@ pkgsNative.stdenv.mkDerivation {
       APPEND init=${systemTopLevel}/init ${kernelParams}
     EXTEOF
 
-    # Strip leading whitespace (nix heredoc indentation)
     sed -i 's/^    //' extlinux.conf
 
     mcopy -i boot.img extlinux.conf ::extlinux/extlinux.conf
@@ -186,51 +176,37 @@ pkgsNative.stdenv.mkDerivation {
 
     echo "  Boot partition: $(du -sh boot.img | cut -f1)"
 
-    # --- Assemble full NAND image ---
-    echo ">>> Assembling NAND image..."
-    truncate -s ${toString totalFlashBytes} "$img"
+    # --- Output individual components ---
+    echo ">>> Copying flash components..."
 
-    # Write GPT partition table
-    sgdisk \
-      --clear \
-      --set-alignment=1 \
-      --new=1:${toString ubootStartSector}:${toString (bootStartSector - 1)} \
-        --change-name=1:uboot --typecode=1:8300 \
-      --new=2:${toString bootStartSector}:${toString bootEndSector} \
-        --change-name=2:boot --typecode=2:EF00 --attributes=2:set:2 \
-      --new=3:${toString ubiStartSector}:${toString ubiEndSector} \
-        --change-name=3:ubi --typecode=3:8300 \
-      "$img"
+    # Boot loader components (from u-boot build with boot_merger)
+    cp ${u-boot-rk3506}/bin/download.bin "$out/"   # for rkdeveloptool db
+    cp ${u-boot-rk3506}/bin/idblock.img  "$out/"   # IDB format for NAND
+    cp ${u-boot-rk3506}/bin/idbloader.img "$out/"  # rksd format for SD
+    cp ${u-boot-rk3506}/bin/u-boot.itb   "$out/"
 
-    # Write idbloader at sector 64 (32KB) — same as SD card convention
-    # The BootROM reads from this fixed offset.
-    dd if=${u-boot-rk3506}/bin/idbloader.img of="$img" bs=512 seek=64 conv=notrunc status=none
-
-    # Write u-boot.itb into the uboot partition
-    dd if=${u-boot-rk3506}/bin/u-boot.itb of="$img" bs=512 seek=${toString ubootStartSector} conv=notrunc status=none
-
-    # Write boot partition
-    dd if=boot.img of="$img" bs=512 seek=${toString bootStartSector} conv=notrunc status=none
-
-    # Write UBI image
-    dd if=ubi.img of="$img" bs=512 seek=${toString ubiStartSector} conv=notrunc status=none
-
-    echo ""
-    echo "=== NAND image built: $img ==="
-    echo "  Total size: $(du -sh "$img" | cut -f1)"
-    echo ""
-    echo "  Flash with rkdeveloptool in Maskrom mode:"
-    echo "    rkdeveloptool db ${u-boot-rk3506}/bin/idbloader.img"
-    echo "    rkdeveloptool wl 0 $img"
-    echo ""
-    echo "  Or flash individual components:"
-    echo "    rkdeveloptool wl 0x40 ${u-boot-rk3506}/bin/idbloader.img"
-    echo "    rkdeveloptool wl ${toString ubootStartSector} ${u-boot-rk3506}/bin/u-boot.itb"
-
-    # Also output individual components for flexible flashing
-    cp ${u-boot-rk3506}/bin/idbloader.img "$out/"
-    cp ${u-boot-rk3506}/bin/u-boot.itb "$out/"
-    cp ubi.img "$out/"
+    # Filesystem images
     cp boot.img "$out/"
+    cp ubi.img  "$out/"
+
+    # Write a layout metadata file for the flash script
+    cat > "$out/layout.env" << 'LAYOUT'
+    IDBLOCK_SECTOR=${toString idblockStartSector}
+    UBOOT_SECTOR=${toString ubootStartSector}
+    BOOT_SECTOR=${toString bootStartSector}
+    UBI_SECTOR=${toString ubiStartSector}
+    LAYOUT
+
+    sed -i 's/^    //' "$out/layout.env"
+
+    echo ""
+    echo "=== NAND flash components built ==="
+    echo "  Flash with: nix run .#flash-nand"
+    echo ""
+    echo "  Layout:"
+    echo "    idblock.img  @ sector ${toString idblockStartSector} ($(( ${toString idblockStartSector} * 512 / 1024 ))K)"
+    echo "    u-boot.itb   @ sector ${toString ubootStartSector} ($(( ${toString ubootStartSector} * 512 / 1024 ))K)"
+    echo "    boot.img     @ sector ${toString bootStartSector} ($(( ${toString bootStartSector} * 512 / 1024 ))K)"
+    echo "    ubi.img      @ sector ${toString ubiStartSector} ($(( ${toString ubiStartSector} * 512 / 1024 ))K)"
   '';
 }

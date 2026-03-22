@@ -1,7 +1,7 @@
 # finix system configuration for Luckfox Lyra (RK3506G2), SPI NAND boot.
 #
 # Boot flow: BootROM → idbloader (raw) → U-Boot (raw) → extlinux.conf
-#            (mtd_blk boot partition) → kernel → ubi.mtd=3 → UBIFS rootfs
+#            (mtd_blk boot partition) → kernel → ubi.mtd=4 → UBIFS rootfs
 #
 # Flash layout (128 MiB SPI NAND):
 #   mtd0: idbloader  (0x000000 - 0x400000,  4M)
@@ -42,7 +42,7 @@ in
     "rw"
     # Auto-attach UBI to mtd3 (the 'ubi' partition from DT fixed-partitions).
     # The kernel's MTD_UBI module handles this before rootfs mount.
-    "ubi.mtd=3"
+    "ubi.mtd=4"
   ];
 
   # mkForce: override finix's x86-centric defaults (ahci, nvme, etc.)

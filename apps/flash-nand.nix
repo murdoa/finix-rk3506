@@ -1,19 +1,19 @@
-# Flash the SPI NAND image to a Luckfox Lyra via rkdeveloptool (Maskrom mode).
+# Flash SPI NAND on Luckfox Lyra via rkdeveloptool (Maskrom mode).
+#
+# Flashes partitions individually matching Rockchip NAND conventions:
+#   1. db download.bin       — enter Loader mode
+#   2. wl <sector> component — write each partition
 #
 # Usage: nix run .#flash-nand
-#
-# Prerequisites:
-#   1. Connect board via USB-C while holding BOOT button (enters Maskrom mode)
-#   2. rkdeveloptool must be in PATH (or install via: nix-shell -p rkdeveloptool)
-{ pkgs, mkApp, nandImage }:
+{ pkgs, mkApp, nandImage, rkbin }:
 
 mkApp "flash-nand" ''
   set -euo pipefail
 
   if [[ "''${1:-}" == "--help" || "''${1:-}" == "-h" ]]; then
-    echo "Usage: nix run .#flash-nand"
+    echo "Usage: nix run .#flash-nand [--erase-first]"
     echo ""
-    echo "Flash the SPI NAND image to a Luckfox Lyra via rkdeveloptool."
+    echo "Flash SPI NAND on Luckfox Lyra via rkdeveloptool."
     echo ""
     echo "The board must be in Maskrom mode:"
     echo "  1. Hold the BOOT button"
@@ -21,26 +21,26 @@ mkApp "flash-nand" ''
     echo "  3. Release BOOT button"
     echo ""
     echo "Options:"
-    echo "  --idb-only    Flash only the idbloader (for recovery)"
-    echo "  --no-idb      Flash everything except idbloader"
+    echo "  --erase-first   Erase flash before writing"
     echo ""
     exit 0
   fi
 
-  IMG="${nandImage}/finix-rk3506-nand.img"
-  IDB="${nandImage}/idbloader.img"
+  NAND="${nandImage}"
+  DB_LOADER="$NAND/download.bin"
 
-  if [ ! -f "$IMG" ]; then
-    echo "ERROR: NAND image not found at $IMG"
+  # Source layout offsets
+  . "$NAND/layout.env"
+
+  if [ ! -f "$NAND/idblock.img" ]; then
+    echo "ERROR: NAND components not found at $NAND"
     exit 1
   fi
 
   # Check for rkdeveloptool
   if ! command -v rkdeveloptool &>/dev/null; then
     echo "ERROR: rkdeveloptool not found in PATH"
-    echo ""
     echo "Install it with: nix-shell -p rkdeveloptool"
-    echo "Or add it to your flake's devShells."
     exit 1
   fi
 
@@ -52,27 +52,18 @@ mkApp "flash-nand" ''
     echo "  1. Hold the BOOT button on the Luckfox Lyra"
     echo "  2. Connect USB-C to your host"
     echo "  3. Release BOOT button"
-    echo ""
-    echo "Check with: rkdeveloptool ld"
     exit 1
   fi
 
   echo "Found device in Maskrom mode."
   echo ""
-
-  if [[ "''${1:-}" == "--idb-only" ]]; then
-    echo "Flashing idbloader only..."
-    rkdeveloptool db "$IDB"
-    echo "Done! idbloader flashed."
-    exit 0
-  fi
-
-  IMG_SIZE=$(stat -c%s "$IMG")
-  IMG_SIZE_MB=$(( IMG_SIZE / 1048576 ))
-
-  echo "Image: $IMG (''${IMG_SIZE_MB} MiB)"
+  echo "Components:"
+  echo "  idblock.img  @ sector $IDBLOCK_SECTOR ($(( IDBLOCK_SECTOR * 512 / 1024 ))K)"
+  echo "  u-boot.itb   @ sector $UBOOT_SECTOR ($(( UBOOT_SECTOR * 512 / 1024 ))K)"
+  echo "  boot.img     @ sector $BOOT_SECTOR ($(( BOOT_SECTOR * 512 / 1024 ))K)"
+  echo "  ubi.img      @ sector $UBI_SECTOR ($(( UBI_SECTOR * 512 / 1024 ))K)"
   echo ""
-  echo "THIS WILL ERASE THE ENTIRE SPI NAND FLASH."
+  echo "THIS WILL ERASE THE SPI NAND FLASH."
   read -p "Type 'yes' to continue: " CONFIRM
   if [ "$CONFIRM" != "yes" ]; then
     echo "Aborted."
@@ -80,15 +71,27 @@ mkApp "flash-nand" ''
   fi
 
   echo ""
+  echo ">>> Downloading loader (Maskrom → Loader)..."
+  rkdeveloptool db "$DB_LOADER"
+  sleep 2
 
-  if [[ "''${1:-}" != "--no-idb" ]]; then
-    echo ">>> Downloading idbloader (enter Loader mode)..."
-    rkdeveloptool db "$IDB"
+  if [[ "''${1:-}" == "--erase-first" ]]; then
+    echo ">>> Erasing flash..."
+    rkdeveloptool ef
     sleep 1
   fi
 
-  echo ">>> Writing full NAND image..."
-  rkdeveloptool wl 0 "$IMG"
+  echo ">>> Writing idblock @ sector $IDBLOCK_SECTOR..."
+  rkdeveloptool wl $IDBLOCK_SECTOR "$NAND/idblock.img"
+
+  echo ">>> Writing u-boot.itb @ sector $UBOOT_SECTOR..."
+  rkdeveloptool wl $UBOOT_SECTOR "$NAND/u-boot.itb"
+
+  echo ">>> Writing boot.img @ sector $BOOT_SECTOR..."
+  rkdeveloptool wl $BOOT_SECTOR "$NAND/boot.img"
+
+  echo ">>> Writing ubi.img @ sector $UBI_SECTOR..."
+  rkdeveloptool wl $UBI_SECTOR "$NAND/ubi.img"
 
   echo ">>> Resetting device..."
   rkdeveloptool rd

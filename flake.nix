@@ -180,6 +180,7 @@
         pkgs = pkgsNative;
         sdImage = self.packages.${buildSystem}.sdImage;
         nandImage = self.packages.${buildSystem}.nandImage;
+        rkbin = self.packages.${buildSystem}.rkbin;
       };
     };
 }

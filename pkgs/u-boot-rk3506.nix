@@ -64,10 +64,29 @@ stdenv.mkDerivation {
       KCFLAGS="-Wno-error=maybe-uninitialized -Wno-error=enum-int-mismatch -Wno-error=incompatible-pointer-types -Wno-error=int-conversion" \
       -j$NIX_BUILD_CORES
 
-    # idbloader.img: BootROM loads from sector 64
+    # idbloader.img: BootROM loads from sector 64 (SD/eMMC)
     tools/mkimage -n rk3506 -T rksd \
       -d ${rkbin}/bin/rk3506_ddr_750MHz_v1.06.bin:spl/u-boot-spl.bin \
       idbloader.img
+
+    # idblock.img: NAND/SPI boot format via boot_merger with our U-Boot SPL.
+    # Replicates what Luckfox SDK's scripts/spl.sh does.
+    #
+    # boot_merger writes temp files next to its own binary (!), so we must
+    # copy the tool into a writable tree alongside the blobs and ini.
+    mkdir -p _merger/bin/rk35 _merger/tools
+    cp ${rkbin}/bin/rk3506_ddr_750MHz_v1.06.bin _merger/bin/rk35/
+    cp ${rkbin}/bin/rk3506_usbplug_v1.03.bin    _merger/bin/rk35/
+    cp spl/u-boot-spl.bin                        _merger/bin/rk35/rk3506_spl_v1.11.bin
+    cp ${rkbin}/bin/RK3506MINIALL.ini            _merger/MINIALL.ini
+    cp ${rkbin}/tools/boot_merger                _merger/tools/boot_merger
+    chmod +x _merger/tools/boot_merger
+    pushd _merger
+    tools/boot_merger MINIALL.ini
+    popd
+    cp _merger/rk3506_spl_loader_v*.bin .
+    cp _merger/rk3506_idblock_v*.img .
+    rm -rf _merger
 
     # u-boot.itb: FIT containing U-Boot + OP-TEE
     cp ${rkbin}/bin/rk3506_tee_v2.10.bin tee.bin
@@ -82,6 +101,8 @@ stdenv.mkDerivation {
 
     mkdir -p $out/bin
     cp idbloader.img u-boot.itb $out/bin/
+    cp rk3506_spl_loader_v*.bin $out/bin/download.bin
+    cp rk3506_idblock_v*.img $out/bin/idblock.img
     cp u-boot.bin u-boot.its spl/u-boot-spl.bin $out/bin/ 2>/dev/null || true
 
     mkdir -p $out/dtb

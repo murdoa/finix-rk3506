@@ -20,6 +20,16 @@ stdenvNoCC.mkDerivation {
   };
 
   # Only install the RK3506-relevant blobs, not the entire 2GB+ repo
+  buildPhase = ''
+    runHook preBuild
+
+    # Pack MiniLoaderAll for rkdeveloptool db (Maskrom → Loader transition).
+    # boot_merger reads the .ini which references bin/rk35/* relative to CWD.
+    tools/boot_merger RKBOOT/RK3506MINIALL.ini
+
+    runHook postBuild
+  '';
+
   installPhase = ''
     runHook preInstall
 
@@ -37,6 +47,12 @@ stdenvNoCC.mkDerivation {
     # USB firmware download tool blob
     cp bin/rk35/rk3506_usbplug_v1.03.bin $out/bin/
 
+    # Packed MiniLoaderAll (for rkdeveloptool db in Maskrom mode)
+    cp rk3506_spl_loader_v*.bin $out/bin/
+
+    # IDB block image (native BootROM format for on-flash storage)
+    cp rk3506_idblock_v*.img $out/bin/
+
     # Boot pack configs
     cp RKBOOT/RK3506MINIALL.ini $out/bin/
 
@@ -50,7 +66,6 @@ stdenvNoCC.mkDerivation {
     runHook postInstall
   '';
 
-  dontBuild = true;
   dontFixup = true;
 
   meta = {

@@ -1,4 +1,4 @@
-{ pkgs, sdImage, nandImage }:
+{ pkgs, sdImage, nandImage, rkbin }:
 
 let
   # Hardcode YOUR card reader here. Find it with:
@@ -12,5 +12,5 @@ let
 in
 {
   flash = import ./flash.nix { inherit pkgs mkApp sdCardById sdImage; };
-  flash-nand = import ./flash-nand.nix { inherit pkgs mkApp nandImage; };
+  flash-nand = import ./flash-nand.nix { inherit pkgs mkApp nandImage rkbin; };
 }
