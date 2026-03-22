@@ -63,10 +63,6 @@ stdenv.mkDerivation {
     sed -i 's|obj-$(CONFIG_USB_FUNCTION_MASS_STORAGE) += f_mass_storage.o|obj-$(CONFIG_USB_GADGET_DOWNLOAD) += f_mass_storage.o|' \
       drivers/usb/gadget/Makefile
 
-    # Debug: trace g_dnl_do_config linker list iteration
-    sed -i 's|for (; callback != g_dnl_bind_callback_end(); callback++)|printf("g_dnl_do_config: s=%p start=%p end=%p\\n", s, callback, g_dnl_bind_callback_end()); for (; callback != g_dnl_bind_callback_end(); callback++)|' \
-      drivers/usb/gadget/g_dnl.c
-
     # Disable Rockchip flash-based BBT for usbplug.
     # MTD_SPI_NAND force-selects MTD_NAND_BBT_USING_FLASH via Kconfig,
     # so we must patch both the Kconfig select and the runtime flag.
@@ -79,6 +75,28 @@ stdenv.mkDerivation {
     # Replace the NAND if-branch with the simple lba = size >> 9 assignment.
     sed -i 's|if (mtd->type == MTD_NANDFLASH) {|if (0) {|' \
       drivers/mtd/mtd_blk.c
+
+    # Disable ALL bad block checking in read/write/erase paths.
+    # The proprietary usbplug corrupted OOB markers, causing the MTD layer
+    # to think blocks are factory-bad. They're not — just corrupted data.
+    # After erase, they'll be fine. The usbplug writes raw images to the
+    # full flash; bad block skipping would shift data and corrupt the layout.
+    #
+    # There are TWO independent bad block check paths:
+    #   1. MTD layer: mtd_block_isbad() in mtdcore.c — used by mtd_map_erase()
+    #   2. NAND core: nanddev_isbad() in nand/core.c — used by nanddev_erase()
+    # Both must be disabled. The NAND core path reads OOB byte 0-1 from page 0
+    # of each erase block via spinand_isbad(). Corrupted OOB = "factory bad".
+    sed -i 's|if (!mtd->_block_isbad)|if (1)|' \
+      drivers/mtd/mtdcore.c
+
+    # Patch nanddev_erase() to skip the nanddev_isbad()/nanddev_isreserved()
+    # check. Without this, every erase returns -EIO because spinand_isbad()
+    # reads corrupted OOB markers and declares every block factory-bad.
+    sed -i 's%if (nanddev_isbad(nand, pos) || nanddev_isreserved(nand, pos))%if (0)%' \
+      drivers/mtd/nand/core.c
+
+
   '';
 
   configurePhase = ''
