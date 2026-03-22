@@ -152,6 +152,9 @@
         u-boot-rk3506 = pkgsCross.callPackage ./pkgs/u-boot-rk3506.nix {
           inherit rkbin;
         };
+        u-boot-usbplug-rk3506 = pkgsCross.callPackage ./pkgs/u-boot-usbplug-rk3506.nix {
+          inherit rkbin;
+        };
 
         # Rockchip proprietary upgrade tool (alternative to rkdeveloptool)
         upgrade-tool = pkgsNative.callPackage ./pkgs/upgrade-tool.nix { };
@@ -215,6 +218,7 @@
         nandImage = self.packages.${buildSystem}.nandImage;
         nandFlasherImage = self.packages.${buildSystem}.nandFlasherImage;
         rkbin = self.packages.${buildSystem}.rkbin;
+        usbplug = self.packages.${buildSystem}.u-boot-usbplug-rk3506;
       };
     };
 }

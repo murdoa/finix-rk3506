@@ -1,10 +1,11 @@
 # Flash full SPI NAND image on Luckfox Lyra via rkdeveloptool (Maskrom mode).
 #
-# Writes a single contiguous 256 MiB image containing GPT, idblock,
-# u-boot.itb, boot partition, and UBI rootfs in one rkdeveloptool wl command.
+# Uses an open-source U-Boot usbplug that replaces Rockchip's proprietary
+# rk3506_usbplug_v1.03.bin, which corrupts page 63 of random erase blocks.
+# The U-Boot usbplug uses the same MTD stack as the kernel — correct ECC.
 #
 # Usage: nix run .#flash-nand
-{ pkgs, mkApp, nandImage, rkbin }:
+{ pkgs, mkApp, nandImage, usbplug, rkbin }:
 
 mkApp "flash-nand" ''
   set -euo pipefail
@@ -13,8 +14,7 @@ mkApp "flash-nand" ''
     echo "Usage: nix run .#flash-nand [--no-erase]"
     echo ""
     echo "Flash full SPI NAND image on Luckfox Lyra via rkdeveloptool."
-    echo "Writes a single contiguous image (GPT + bootloader + rootfs)."
-    echo "Erases the full flash before writing (default)."
+    echo "Uses open-source U-Boot usbplug for correct SPI NAND writes."
     echo ""
     echo "The board must be in Maskrom mode:"
     echo "  1. Hold the BOOT button"
@@ -28,7 +28,7 @@ mkApp "flash-nand" ''
   fi
 
   NAND="${nandImage}"
-  DB_LOADER="$NAND/download.bin"
+  DB_LOADER="${usbplug}/bin/download.bin"
   NAND_IMG="$NAND/nand.img"
 
   if [ ! -f "$NAND_IMG" ]; then
@@ -67,7 +67,8 @@ mkApp "flash-nand" ''
 
   echo "Found device in Maskrom mode."
   echo ""
-  echo "Image: $NAND_IMG ($(du -h "$NAND_IMG" | awk '{print $1}'))"
+  echo "Loader:  $DB_LOADER (open-source U-Boot usbplug)"
+  echo "Image:   $NAND_IMG ($(du -h "$NAND_IMG" | awk '{print $1}'))"
   echo ""
   echo "THIS WILL ERASE THE SPI NAND FLASH."
   read -p "Type 'yes' to continue: " CONFIRM
@@ -77,9 +78,9 @@ mkApp "flash-nand" ''
   fi
 
   echo ""
-  echo ">>> Downloading loader (Maskrom → Loader)..."
+  echo ">>> Downloading U-Boot usbplug (Maskrom → Loader)..."
   rkdeveloptool db "$DB_LOADER"
-  sleep 2
+  sleep 3
 
   if [[ "''${1:-}" != "--no-erase" ]]; then
     echo ">>> Erasing flash..."
