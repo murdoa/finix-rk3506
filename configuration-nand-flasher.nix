@@ -40,10 +40,8 @@
     password = "$6$cqZKvfwHmoQwVp28$61S9QwBIB3Q5c8mUJt6sZW2cejQIta86KxSeFhDDd1CukI45/Nq0VL7GMVVsqOh9sHySkok2K4M3XpY1i404b/";
   };
 
-  finit.ttys.ttyFIQ0 = {
-    runlevels = "2345";
-    nowait = true;
-  };
+  # No getty by default — the flash script handles the serial console.
+  # If the user aborts flashing, the script spawns a login shell instead.
 
   services.mdevd.enable = true;
   services.sysklogd.enable = true;
@@ -52,31 +50,63 @@
     mtdutils
   ];
 
-  # Oneshot flash task — runs at boot, flashes ubi.img to NAND, reboots.
+  # Oneshot flash task — runs at boot on the serial console.
+  # Shows a countdown; press any key to abort and get a login shell.
   finit.tasks.flash-nand = {
     command = let
       flashScript = pkgs.writeShellApplication {
         name = "flash-nand.sh";
         runtimeInputs = with pkgs; [ busybox mtdutils ];
         text = ''
+          TTY=/dev/ttyFIQ0
+          exec 0< "$TTY"
+          exec 1> "$TTY"
+          exec 2>&1
+
+          abort_to_shell() {
+            echo ""
+            echo "Aborted. Dropping to login shell..."
+            echo ""
+            exec login -f root
+          }
+
+          echo ""
+          echo "================================================"
+          echo "  NAND Flasher — Luckfox Lyra (RK3506)"
+          echo "================================================"
+          echo ""
+
           UBI_IMG="/flash/ubi.img"
           DONE_MARKER="/flash/.flashed"
           MTD_DEV=""
 
-          echo "=== NAND Flasher ==="
-
           # Skip if already flashed
           if [ -f "$DONE_MARKER" ]; then
-            echo "Already flashed (marker exists). Remove $DONE_MARKER to re-flash."
-            exit 0
+            echo "Already flashed (marker exists at $DONE_MARKER)."
+            echo "Remove it to re-flash, or dropping to shell."
+            abort_to_shell
           fi
 
           # Check ubi.img exists
           if [ ! -f "$UBI_IMG" ]; then
             echo "ERROR: $UBI_IMG not found!"
             echo "The SD image was not built correctly."
-            exit 1
+            abort_to_shell
           fi
+
+          # Countdown — press any key to abort
+          TIMEOUT=5
+          echo "Flashing will begin in $TIMEOUT seconds."
+          echo "Press any key to abort and get a login shell."
+          echo ""
+          for i in $(seq "$TIMEOUT" -1 1); do
+            printf "\r  Starting in %d... " "$i"
+            if read -r -t 1 -n 1 2>/dev/null; then
+              abort_to_shell
+            fi
+          done
+          printf "\r                      \r"
+          echo ""
 
           # Find the MTD device for the "ubi" partition
           while IFS=': ' read -r dev _size _erasesize name; do
@@ -93,7 +123,7 @@
             cat /proc/mtd
             echo ""
             echo "Is the correct DTB loaded? Need rk3506g-luckfox-lyra-nand.dtb"
-            exit 1
+            abort_to_shell
           fi
 
           echo "Found UBI partition: $MTD_DEV"
@@ -103,18 +133,21 @@
           echo ">>> Erasing $MTD_DEV..."
           flash_erase "$MTD_DEV" 0 0
           echo "    Done."
+          echo ""
 
           echo ">>> Writing UBI image to $MTD_DEV..."
           nandwrite -p "$MTD_DEV" "$UBI_IMG"
           echo "    Done."
+          echo ""
 
-          # Mark as flashed so we don't re-flash on next boot
+          # Mark as flashed
           touch "$DONE_MARKER"
           sync
 
-          echo ""
-          echo "=== NAND flash complete! ==="
-          echo "Remove the SD card and reboot to boot from NAND."
+          echo "================================================"
+          echo "  NAND flash complete!"
+          echo "  Remove the SD card and reboot to boot from NAND."
+          echo "================================================"
           echo ""
           echo "Rebooting in 5 seconds..."
           sleep 5
