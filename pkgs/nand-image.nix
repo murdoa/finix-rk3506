@@ -211,20 +211,45 @@ pkgsNative.stdenv.mkDerivation {
     backupStart=$(( totalSectors - 33 ))
     dd if=gpt.img of=gpt-backup.img bs=512 skip=$backupStart count=33
 
-    # --- Output individual components ---
+    # --- Assemble single contiguous NAND image ---
+    echo ">>> Assembling full NAND image..."
+    truncate -s $(( totalSectors * 512 )) nand.img
+
+    # GPT primary (sectors 0..33)
+    dd if=gpt-primary.img of=nand.img bs=512 seek=0 conv=notrunc
+
+    # idblock (sector 512 = 256K)
+    dd if=${u-boot-rk3506}/bin/idblock.img of=nand.img bs=512 seek=${toString idblockStartSector} conv=notrunc
+
+    # u-boot.itb (sector 1024 = 512K)
+    dd if=${u-boot-rk3506}/bin/u-boot.itb of=nand.img bs=512 seek=${toString ubootStartSector} conv=notrunc
+
+    # boot partition (sector 8192 = 4M)
+    dd if=boot.img of=nand.img bs=512 seek=${toString bootStartSector} conv=notrunc
+
+    # UBI rootfs (sector 49152 = 24M)
+    dd if=ubi.img of=nand.img bs=512 seek=${toString ubiStartSector} conv=notrunc
+
+    # GPT backup (last 33 sectors)
+    dd if=gpt-backup.img of=nand.img bs=512 seek=$backupStart conv=notrunc
+
+    echo "  Full NAND image: $(du -sh nand.img | cut -f1)"
+
+    # --- Output ---
     echo ">>> Copying flash components..."
 
-    # Boot loader components (from u-boot build with boot_merger)
-    cp ${u-boot-rk3506}/bin/download.bin "$out/"   # for rkdeveloptool db
-    cp ${u-boot-rk3506}/bin/idblock.img  "$out/"   # IDB format for NAND
-    cp ${u-boot-rk3506}/bin/idbloader.img "$out/"  # rksd format for SD
-    cp ${u-boot-rk3506}/bin/u-boot.itb   "$out/"
+    # Full contiguous image for single-command flash
+    cp nand.img "$out/"
 
-    # GPT images
+    # Loader for rkdeveloptool db
+    cp ${u-boot-rk3506}/bin/download.bin "$out/"
+
+    # Individual components (for SD flasher and debugging)
+    cp ${u-boot-rk3506}/bin/idblock.img  "$out/"
+    cp ${u-boot-rk3506}/bin/idbloader.img "$out/"
+    cp ${u-boot-rk3506}/bin/u-boot.itb   "$out/"
     cp gpt-primary.img "$out/"
     cp gpt-backup.img  "$out/"
-
-    # Filesystem images
     cp boot.img "$out/"
     cp ubi.img  "$out/"
 
@@ -235,10 +260,12 @@ pkgsNative.stdenv.mkDerivation {
     BOOT_SECTOR=${toString bootStartSector}
     UBI_SECTOR=${toString ubiStartSector}
     GPT_BACKUP_SECTOR=BACKUP_PLACEHOLDER
+    TOTAL_SECTORS=TOTAL_PLACEHOLDER
     LAYOUT
 
     sed -i 's/^    //' "$out/layout.env"
     sed -i "s/BACKUP_PLACEHOLDER/$backupStart/" "$out/layout.env"
+    sed -i "s/TOTAL_PLACEHOLDER/$totalSectors/" "$out/layout.env"
 
     echo ""
     echo "=== NAND flash components built ==="
@@ -251,5 +278,7 @@ pkgsNative.stdenv.mkDerivation {
     echo "    boot.img     @ sector ${toString bootStartSector} ($(( ${toString bootStartSector} * 512 / 1024 ))K)"
     echo "    ubi.img      @ sector ${toString ubiStartSector} ($(( ${toString ubiStartSector} * 512 / 1024 ))K)"
     echo "    gpt-backup   @ sector $backupStart"
+    echo ""
+    echo "  Full image:    nand.img ($(du -sh nand.img | cut -f1))"
   '';
 }

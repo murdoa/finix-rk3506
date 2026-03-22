@@ -23,7 +23,10 @@
       # Target
       targetSystem = "armv7l-linux";
 
-      allowRkbin = pkg: builtins.elem (nixpkgs.lib.getName pkg) [ "rkbin-rk3506" ];
+      allowRkbin = pkg: builtins.elem (nixpkgs.lib.getName pkg) [
+        "rkbin-rk3506"
+        "rockchip-upgrade-tool"
+      ];
 
       pkgsCross = import nixpkgs {
         localSystem = buildSystem;
@@ -149,6 +152,9 @@
         u-boot-rk3506 = pkgsCross.callPackage ./pkgs/u-boot-rk3506.nix {
           inherit rkbin;
         };
+
+        # Rockchip proprietary upgrade tool (alternative to rkdeveloptool)
+        upgrade-tool = pkgsNative.callPackage ./pkgs/upgrade-tool.nix { };
 
         # Bootable SD card image
         sdImage = pkgsNative.callPackage ./pkgs/sd-image.nix {
