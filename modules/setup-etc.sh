@@ -1,120 +1,104 @@
 #!/usr/bin/env bash
 # Drop-in replacement for setup-etc.pl — eliminates perl (~51 MiB) from the
 # system closure. Implements the same /etc/static symlink management logic.
-set -euo pipefail
+#
+# Deliberately avoids set -e: individual failures (stale symlinks, permission
+# issues) should not abort the entire /etc setup.
 
 etc="$1"
 static="/etc/static"
 
-# Ensure /tmp exists — mktemp needs it, and on first boot /tmp may not
-# exist yet (specialfs activation runs after etc activation).
+if [ -z "$etc" ]; then
+    echo "setup-etc.sh: no etc path provided" >&2
+    exit 1
+fi
+
+echo "setup-etc.sh: starting, etc=$etc" >&2
+
+# Ensure /tmp exists for mktemp (specialfs activation runs after us).
 mkdir -p /tmp
 
-atomic_symlink() {
-    local source="$1" target="$2" tmp="$target.tmp"
-    rm -f "$tmp"
-    ln -s "$source" "$tmp" && mv "$tmp" "$target"
-}
-
-is_static() {
-    local path="$1"
-    if [ -L "$path" ]; then
-        local target
-        target="$(readlink "$path")"
-        [[ "$target" == /etc/static/* ]]
-        return
-    fi
-    if [ -d "$path" ]; then
-        local entry
-        for entry in "$path"/*; do
-            [ -e "$entry" ] || [ -L "$entry" ] || continue
-            is_static "$entry" || return 1
-        done
-        return 0
-    fi
-    return 1
-}
-
 # Atomically update /etc/static to point at current configuration's etc.
-atomic_symlink "$etc" "$static"
+ln -sfn "$etc" "$static"
+echo "setup-etc.sh: /etc/static -> $(readlink "$static")" >&2
 
-# Remove dangling symlinks that point to /etc/static from previous configs.
+# Remove dangling symlinks that point to a previous /etc/static.
 find /etc -path /etc/nixos -prune -o -type l -print 2>/dev/null | while IFS= read -r link; do
     target="$(readlink "$link" 2>/dev/null)" || continue
-    if [[ "$target" == "$static"* ]]; then
-        relative="${link#/etc/}"
-        if [ ! -L "$static/$relative" ] && [ ! -e "$static/$relative" ]; then
-            echo "removing obsolete symlink '$link'..." >&2
-            rm -f "$link"
-        fi
-    fi
+    case "$target" in
+        "$static"*)
+            relative="${link#/etc/}"
+            if [ ! -e "$static/$relative" ]; then
+                echo "removing obsolete symlink '$link'..." >&2
+                rm -f "$link"
+            fi
+            ;;
+    esac
 done
 
 # Track copied files for cleanup across generations.
-old_copied=()
+old_clean=()
 if [ -f /etc/.clean ]; then
-    mapfile -t old_copied < /etc/.clean
+    while IFS= read -r line; do
+        old_clean+=("$line")
+    done < /etc/.clean
 fi
 
-# Collect list of files we create, for the .clean tracker.
 clean_tmp="$(mktemp)"
-trap 'rm -f "$clean_tmp"' EXIT
-
-# Build set of created files for later diffing against old_copied.
 created_tmp="$(mktemp)"
 
 # For every file in the etc tree, create a corresponding symlink in /etc.
+# Use process substitution to avoid subshell issues with pipes.
 while IFS= read -r entry; do
     fn="${entry#"$etc"/}"
     [ -n "$fn" ] || continue
+
+    # Skip sidecar metadata files
+    case "$fn" in
+        *.mode|*.uid|*.gid) continue ;;
+    esac
 
     target="/etc/$fn"
     echo "$fn" >> "$created_tmp"
     mkdir -p "$(dirname "$target")"
 
-    if [ -L "$entry" ] && [ -d "$target" ] && [ ! -L "$target" ]; then
-        if is_static "$target"; then
-            rm -rf "$target"
-        else
-            echo "$target directory contains user files. Symlinking may fail." >&2
-        fi
+    # Skip directories
+    if [ -d "$entry" ] && [ ! -L "$entry" ]; then
+        continue
     fi
 
     if [ -f "$entry.mode" ]; then
         mode="$(cat "$entry.mode")"
         if [ "$mode" = "direct-symlink" ]; then
-            src_link="$(readlink "$static/$fn" 2>/dev/null)" || true
-            dst_link="$(readlink "$target" 2>/dev/null)" || true
-            if [ ! -L "$target" ] || [ "$src_link" != "$dst_link" ]; then
-                atomic_symlink "$(readlink "$static/$fn")" "$target"
+            src_store="$(readlink "$static/$fn" 2>/dev/null)" || true
+            dst_store="$(readlink "$target" 2>/dev/null)" || true
+            if [ ! -L "$target" ] || [ "$src_store" != "$dst_store" ]; then
+                ln -sfn "$src_store" "$target"
             fi
         else
-            uid="$(cat "$entry.uid")"
-            gid="$(cat "$entry.gid")"
-            cp "$static/$fn" "$target.tmp"
-            # Resolve user/group names to IDs if not numeric
-            if [[ ! "$uid" =~ ^\+ ]]; then
-                uid="$(id -u "$uid" 2>/dev/null)" || uid=0
-            else
-                uid="${uid#+}"
-            fi
-            if [[ ! "$gid" =~ ^\+ ]]; then
-                gid="$(getent group "$gid" 2>/dev/null | cut -d: -f3)" || gid=0
-            else
-                gid="${gid#+}"
-            fi
-            chown "$uid:$gid" "$target.tmp"
-            chmod "$mode" "$target.tmp"
-            mv "$target.tmp" "$target" || { echo "could not create target $target" >&2; rm -f "$target.tmp"; }
+            uid="$(cat "$entry.uid" 2>/dev/null)" || uid="root"
+            gid="$(cat "$entry.gid" 2>/dev/null)" || gid="root"
+            cp "$static/$fn" "$target.tmp" 2>/dev/null || continue
+            case "$uid" in
+                +*) uid="${uid#+}" ;;
+                *) uid="$(id -u "$uid" 2>/dev/null)" || uid=0 ;;
+            esac
+            case "$gid" in
+                +*) gid="${gid#+}" ;;
+                *) gid="$(getent group "$gid" 2>/dev/null | cut -d: -f3)" || gid=0 ;;
+            esac
+            chown "$uid:$gid" "$target.tmp" 2>/dev/null
+            chmod "$mode" "$target.tmp" 2>/dev/null
+            mv "$target.tmp" "$target" 2>/dev/null || rm -f "$target.tmp"
         fi
         echo "$fn" >> "$clean_tmp"
     elif [ -L "$entry" ]; then
-        atomic_symlink "$static/$fn" "$target"
+        ln -sfn "$static/$fn" "$target"
     fi
 done < <(find "$etc" -mindepth 1)
 
 # Delete files that were copied in a previous version but not in the current.
-for fn in "${old_copied[@]}"; do
+for fn in "${old_clean[@]}"; do
     [ -n "$fn" ] || continue
     if ! grep -qxF "$fn" "$created_tmp" 2>/dev/null; then
         echo "removing obsolete file '/etc/$fn'..." >&2
@@ -124,7 +108,11 @@ done
 
 # Rewrite /etc/.clean
 sort "$clean_tmp" > /etc/.clean 2>/dev/null || true
-rm -f "$created_tmp"
+rm -f "$clean_tmp" "$created_tmp"
 
 # Create /etc/NIXOS tag
 touch /etc/NIXOS
+
+echo "setup-etc.sh: done. /etc/fstab exists: $([ -e /etc/fstab ] && echo YES || echo NO)" >&2
+echo "setup-etc.sh: /etc/finit.conf exists: $([ -e /etc/finit.conf ] && echo YES || echo NO)" >&2
+ls -la /etc/fstab /etc/finit.conf /etc/static 2>&1 >&2 || true
