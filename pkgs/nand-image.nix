@@ -127,7 +127,7 @@ pkgsNative.stdenv.mkDerivation {
 
     # --- UBI image (wraps UBIFS volume) ---
     echo ">>> Building UBI image..."
-    cat > ubinize.cfg << EOF
+    cat > ubinize.cfg << 'UBICFG'
     [rootfs]
     mode=ubi
     vol_id=0
@@ -135,7 +135,8 @@ pkgsNative.stdenv.mkDerivation {
     vol_type=dynamic
     vol_flags=autoresize
     image=rootfs.ubifs
-    EOF
+UBICFG
+    sed -i 's/^    //' ubinize.cfg
 
     ubinize \
       --min-io-size=${toString pageSize} \
@@ -163,19 +164,17 @@ pkgsNative.stdenv.mkDerivation {
     mmd -i boot.img ::dtb
 
     cat > extlinux.conf << 'EXTEOF'
-    DEFAULT finix
-    TIMEOUT 30
-    PROMPT 0
+DEFAULT finix
+TIMEOUT 30
+PROMPT 0
 
-    LABEL finix
-      MENU LABEL finix
-      LINUX /kernel
-      INITRD /initrd
-      FDT /dtb/${dtbName}
-      APPEND init=${systemTopLevel}/init ${kernelParams}
-    EXTEOF
-
-    sed -i 's/^    //' extlinux.conf
+LABEL finix
+  MENU LABEL finix
+  LINUX /kernel
+  INITRD /initrd
+  FDT /dtb/${dtbName}
+  APPEND init=${systemTopLevel}/init ${kernelParams}
+EXTEOF
 
     mcopy -i boot.img extlinux.conf ::extlinux/extlinux.conf
     mcopy -i boot.img ${kernelPath} ::kernel
@@ -211,6 +210,18 @@ pkgsNative.stdenv.mkDerivation {
     backupStart=$(( totalSectors - 33 ))
     dd if=gpt.img of=gpt-backup.img bs=512 skip=$backupStart count=33
 
+    # --- parameter.txt for upgrade_tool di commands ---
+    cat > parameter.txt << 'PARAMEOF'
+FIRMWARE_VER:8.1
+MACHINE_MODEL:RK3506
+TYPE: GPT
+GROW_ALIGN: 0
+CMDLINE:mtdparts=:0x00001c00@0x00000400(uboot),0x0000a000@0x00002000(boot),-@0x0000c000(rootfs:grow)
+PARAMEOF
+
+    echo "  parameter.txt:"
+    cat parameter.txt
+
     # --- Assemble single contiguous NAND image ---
     echo ">>> Assembling full NAND image..."
     truncate -s $(( totalSectors * 512 )) nand.img
@@ -241,7 +252,7 @@ pkgsNative.stdenv.mkDerivation {
     # Full contiguous image for single-command flash
     cp nand.img "$out/"
 
-    # Loader for rkdeveloptool db
+    # Loader for rkdeveloptool db / upgrade_tool ul
     cp ${u-boot-rk3506}/bin/download.bin "$out/"
 
     # Individual components (for SD flasher and debugging)
@@ -253,19 +264,21 @@ pkgsNative.stdenv.mkDerivation {
     cp boot.img "$out/"
     cp ubi.img  "$out/"
 
-    # Write a layout metadata file for the flash script
-    cat > "$out/layout.env" << 'LAYOUT'
-    IDBLOCK_SECTOR=${toString idblockStartSector}
-    UBOOT_SECTOR=${toString ubootStartSector}
-    BOOT_SECTOR=${toString bootStartSector}
-    UBI_SECTOR=${toString ubiStartSector}
-    GPT_BACKUP_SECTOR=BACKUP_PLACEHOLDER
-    TOTAL_SECTORS=TOTAL_PLACEHOLDER
-    LAYOUT
+    # For upgrade_tool di commands — named to match parameter.txt partitions
+    cp ${u-boot-rk3506}/bin/u-boot.itb "$out/uboot.img"
+    cp ubi.img "$out/rootfs.img"
+    cp parameter.txt "$out/"
 
-    sed -i 's/^    //' "$out/layout.env"
-    sed -i "s/BACKUP_PLACEHOLDER/$backupStart/" "$out/layout.env"
-    sed -i "s/TOTAL_PLACEHOLDER/$totalSectors/" "$out/layout.env"
+    # Write a layout metadata file for the flash script
+    cat > layout.env << LAYOUT
+IDBLOCK_SECTOR=${toString idblockStartSector}
+UBOOT_SECTOR=${toString ubootStartSector}
+BOOT_SECTOR=${toString bootStartSector}
+UBI_SECTOR=${toString ubiStartSector}
+GPT_BACKUP_SECTOR=$backupStart
+TOTAL_SECTORS=$totalSectors
+LAYOUT
+    cp layout.env "$out/"
 
     echo ""
     echo "=== NAND flash components built ==="
