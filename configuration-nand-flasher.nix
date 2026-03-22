@@ -18,20 +18,15 @@
   pkgs,
   lib,
   finixModules,
+  board,
   ...
 }:
-let
-  linux-rockchip-rk3506 = pkgs.callPackage ./pkgs/linux-rockchip-rk3506.nix { };
-  u-boot-rk3506 = pkgs.callPackage ./pkgs/u-boot-rk3506.nix {
-    rkbin = pkgs.callPackage ./pkgs/rkbin.nix { };
-  };
-in
 {
   imports = [ finixModules.sysklogd ];
 
   networking.hostName = "nand-flasher";
 
-  boot.kernelPackages = pkgs.linuxPackagesFor linux-rockchip-rk3506;
+  boot.kernelPackages = pkgs.linuxPackagesFor board.kernel;
 
   boot.kernelParams = [
     "console=ttyFIQ0"
@@ -66,7 +61,7 @@ in
 
   programs.u-boot-rockchip = {
     enable = true;
-    package = u-boot-rk3506;
+    package = board.u-boot;
     dtbPath = "/dtb/rk3506g-luckfox-lyra-nand.dtb";
     bootDevice = "/dev/mmcblk0";
   };

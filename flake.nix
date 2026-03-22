@@ -36,6 +36,13 @@
 
       finixModules = import "${finix}/modules";
 
+      # Board packages — built once, shared across all configs
+      rkbin = pkgsNative.callPackage ./pkgs/rkbin.nix { };
+      kernel = pkgsCross.callPackage ./pkgs/linux-rockchip-rk3506.nix { };
+      u-boot = pkgsCross.callPackage ./pkgs/u-boot-rk3506.nix { inherit rkbin; };
+      m0-kmod = pkgsCross.callPackage ./pkgs/m0-kmod.nix { inherit kernel; };
+      m0-firmware = pkgsCross.buildPackages.callPackage ./pkgs/m0-firmware-bin.nix { };
+
       # Shared module list — every config gets these
       baseModules = [
         ./modules/minimal.nix
@@ -48,6 +55,10 @@
           specialArgs = {
             inherit finixModules;
             finixSrc = finix;
+            # Board packages — configs use these instead of callPackage
+            board = {
+              inherit kernel u-boot m0-kmod m0-firmware;
+            };
           };
           modules = [
             finixModules.default
@@ -55,11 +66,6 @@
             configModule
           ] ++ baseModules;
         };
-
-      # Shared args for image builders
-      rkbin = pkgsNative.callPackage ./pkgs/rkbin.nix { };
-      kernel = pkgsCross.callPackage ./pkgs/linux-rockchip-rk3506.nix { };
-      u-boot = pkgsCross.callPackage ./pkgs/u-boot-rk3506.nix { inherit rkbin; };
 
       mkImage = builder: configModule: extraArgs:
         pkgsNative.callPackage builder ({

@@ -4,24 +4,15 @@
   pkgs,
   lib,
   finixModules,
+  board,
   ...
 }:
-let
-  linux-rockchip-rk3506 = pkgs.callPackage ./pkgs/linux-rockchip-rk3506.nix { };
-  u-boot-rk3506 = pkgs.callPackage ./pkgs/u-boot-rk3506.nix {
-    rkbin = pkgs.callPackage ./pkgs/rkbin.nix { };
-  };
-  m0-kmod = pkgs.callPackage ./pkgs/m0-kmod.nix {
-    kernel = linux-rockchip-rk3506;
-  };
-  m0-firmware = pkgs.buildPackages.callPackage ./pkgs/m0-firmware-bin.nix { };
-in
 {
   imports = [ finixModules.sysklogd ];
 
   networking.hostName = "finix-rk3506";
 
-  boot.kernelPackages = pkgs.linuxPackagesFor linux-rockchip-rk3506;
+  boot.kernelPackages = pkgs.linuxPackagesFor board.kernel;
 
   boot.kernelParams = [
     "console=ttyFIQ0"
@@ -46,7 +37,7 @@ in
 
   boot.initrd.kernelModules = [ "mmc_block" "ext4" ];
 
-  boot.extraModulePackages = [ m0-kmod ];
+  boot.extraModulePackages = [ board.m0-kmod ];
   boot.kernelModules = [ "rk3506_rproc" ];
 
   # GPT: part1=uboot (raw), part2=boot (FAT32), part3=rootfs (ext4)
@@ -63,7 +54,7 @@ in
 
   programs.u-boot-rockchip = {
     enable = true;
-    package = u-boot-rk3506;
+    package = board.u-boot;
     dtbPath = "/dtb/rk3506g-luckfox-lyra-sd.dtb";
     bootDevice = "/dev/mmcblk0";
   };
@@ -83,7 +74,7 @@ in
   services.sysklogd.enable = true;
 
   # M0 firmware — ELF goes to /lib/firmware for remoteproc
-  hardware.firmware = [ m0-firmware ];
+  hardware.firmware = [ board.m0-firmware ];
 
   # Board-specific packages are in modules/minimal.nix
 }
