@@ -1,8 +1,12 @@
 # finix-rk3506
 
+<p align="center">
+  <img src="imgs/luckfox-lyra-b.jpg" alt="Luckfox Lyra" width="600">
+</p>
+
 [finix](https://github.com/finix-community/finix) running on the Rockchip RK3506 — a triple Cortex-A7 SoC for embedded and industrial use.
 
-This is a complete board support package for the [Luckfox Lyra](https://www.luckfox.com/Luckfox-Lyra). It cross-compiles a bootable system from an x86_64 host, targeting either SD card or SPI NAND flash. One command to build, one command to flash.
+This is a complete board support package for the [Luckfox Lyra](https://www.luckfox.com/Luckfox-Lyra) ($12.99). It cross-compiles a bootable system from an x86_64 host, targeting either SD card or SPI NAND flash. One command to build, one command to flash.
 
 ## What's in the box
 
