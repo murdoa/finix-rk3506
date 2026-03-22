@@ -11,7 +11,25 @@
 #   - DTBs → single board only:                  ~20 MiB  (kernel postInstall)
 #   - System.map removal:                        ~2.7 MiB (kernel postInstall)
 #   - locale stripping:                          ~2.9 MiB
-{ config, pkgs, lib, ... }:
+#   - util-linux → util-linuxMinimal:            ~30 MiB  (kills sqlite, systemd-libs, coreutils)
+#   - FUSE disabled:                             ~1 MiB   (fusermount + fuse2/3 wrappers)
+#   - mdevd PATH → busybox + util-linuxMinimal:  (part of util-linux swap)
+{ config, pkgs, lib, finixSrc, ... }:
+
+let
+  # Build a minimal finix-setup plugin using util-linuxMinimal for mount/swap/fsck.
+  # The upstream finit module builds finix-setup with full util-linux, pulling
+  # sqlite (4.9M), systemd-minimal-libs (3.6M), util-linux-lib (12.8M), etc.
+  finix-setup-minimal = pkgs.callPackage "${finixSrc}/pkgs/finix-setup" {
+    util-linux = pkgs.util-linuxMinimal;
+    unixtools = pkgs.unixtools // {
+      fsck = pkgs.runCommand "fsck-util-linux-minimal-${pkgs.util-linuxMinimal.version}" { } ''
+        mkdir -p $out/bin
+        ln -s ${pkgs.util-linuxMinimal}/bin/fsck $out/bin/fsck
+      '';
+    };
+  };
+in
 
 {
   imports = [ ./etc-setup-bash.nix ];
@@ -37,14 +55,14 @@
     # Full bash for scripts that need it (finix activation uses bash)
     bashInteractive
 
-    # util-linux is still needed — security wrappers reference mount/umount
-    # by full store path, and finit modules use agetty, etc.
-    util-linux
+    # util-linuxMinimal: no lastlog2 (kills sqlite 4.9M), no libudev
+    # (kills systemd-minimal-libs 3.6M), minimal lib (1.9M vs 12.8M).
+    util-linuxMinimal
 
     # terminfo for serial console
     ncurses
 
-    # Board-specific
+    # Board-specific — overlay patches mount.ubifs to use util-linuxMinimal
     mtdutils
   ]);
 
@@ -60,6 +78,29 @@
     "/share/terminfo"
   ];
 
+  # Override finit to use our minimal finix-setup plugin.
+  # The finit module's `apply` function appends --with-plugin-path pointing
+  # to a finix-setup built with full util-linux. We can't prevent that, but
+  # configureFlags is a list and the apply does old ++ [bloated-path].
+  # We override again after apply to filter out the bloated path and add ours.
+  # This works because the module option system evaluates: apply(merge(defs)),
+  # and we wrap the RESULT with another overrideAttrs.
+  #
+  # Actually — we can't post-process after apply from the config side.
+  # Instead, we accept that finit will be built with TWO --with-plugin-path
+  # flags. In autotools, the LAST one wins. The apply appends after our
+  # overrideAttrs, so the bloated path wins. We work around this by
+  # using postConfigure to patch the generated config.h directly.
+  finit.package = let
+    base = pkgs.finit;
+  in base.overrideAttrs (old: {
+    postConfigure = (old.postConfigure or "") + ''
+      # The module's apply function adds --with-plugin-path with full
+      # util-linux. Replace the baked-in path in config.h with our minimal one.
+      sed -i 's|EXTERNAL_PLUGIN_PATH "[^"]*"|EXTERNAL_PLUGIN_PATH "${finix-setup-minimal}/lib/finit/plugins"|' config.h
+    '';
+  });
+
   # No VGA/HDMI console — serial only. Kills kbd (2.5 MiB) and VESA blanking.
   hardware.console.enable = false;
 
@@ -69,7 +110,7 @@
   system.activation.path = lib.mkForce (with pkgs; map lib.getBin [
     busybox         # coreutils, findutils, grep, sed, etc.
     shadow          # needed by user activation
-    util-linux      # mount, mountpoint
+    util-linuxMinimal  # mount, mountpoint — no sqlite/systemd-libs bloat
   ]);
 
   # Replace finit's default PATH packages with busybox.
@@ -77,7 +118,7 @@
   finit.path = lib.mkForce [
     pkgs.busybox
     config.finit.package  # finit itself needs to be in PATH
-    pkgs.util-linux.mount # required by finit on shutdown
+    pkgs.util-linuxMinimal.mount # required by finit on shutdown
   ];
 
   # Replace shebangCompatibility to use busybox env instead of coreutils (1.7 MiB).
@@ -102,7 +143,7 @@
     name = "remount-nix-store.sh";
     runtimeInputs = with pkgs; [
       busybox
-      util-linux
+      util-linuxMinimal
     ];
     text = ''
       chown -f 0:30000 /nix/store
@@ -117,6 +158,30 @@
   # Replace procps sysctl (2.8 MiB) with busybox sysctl.
   finit.tasks.sysctl.command = lib.mkForce
     "${pkgs.busybox}/bin/sysctl -p ${config.environment.etc."sysctl.d/60-finix.conf".source}";
+
+  # Override security wrappers mount/umount to use util-linuxMinimal.
+  # Default points to full util-linux (set in wrappers/default.nix).
+  security.wrappers.mount.source = lib.mkForce
+    "${lib.getBin pkgs.util-linuxMinimal}/bin/mount";
+  security.wrappers.umount.source = lib.mkForce
+    "${lib.getBin pkgs.util-linuxMinimal}/bin/umount";
+
+  # No FUSE on a serial-only embedded board. Kills fusermount/fuse2/fuse3
+  # security wrappers and their dependency chains.
+  boot.supportedFilesystems.fuse.enable = false;
+
+  # Override mdevd's finit service PATH to use busybox + util-linuxMinimal
+  # instead of coreutils + full util-linux.
+  finit.services.mdevd.path = lib.mkForce (with pkgs; [
+    busybox          # replaces coreutils
+    execline         # mdevd scripts use execline
+    kmod             # modprobe for modalias
+    util-linuxMinimal  # blkid for disk symlinks
+  ]);
+
+  # Override suid-sgid-wrappers task PATH: uses coreutils (1.7 MiB) for cp/chmod.
+  # Busybox provides these same utilities.
+  finit.tasks.suid-sgid-wrappers.path = lib.mkForce [ pkgs.busybox ];
 
   # The shadow module hardcodes pam_xauth in su's PAM config, pulling in
   # xauth → libX11 → libxcb (~4.2 MiB of X11 on a headless board).
