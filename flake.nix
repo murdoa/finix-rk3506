@@ -133,6 +133,15 @@
         ];
       };
 
+      nixosConfigurations.rk3506-nand-flasher = finixSystem {
+        modules = [
+          ./configuration-nand-flasher.nix
+          ./modules/minimal.nix
+          ./modules/u-boot-rockchip
+          ./modules/cross-toplevel.nix
+        ];
+      };
+
       packages.${buildSystem} = rec {
         # Cross-compiled packages for the target
         rkbin = pkgsNative.callPackage ./pkgs/rkbin.nix { };
@@ -174,12 +183,31 @@
           inherit u-boot-rk3506;
           kernel = linux-rockchip-rk3506;
         };
+
+        # SD card image that auto-flashes NAND UBI partition on boot
+        nandFlasherImage = pkgsNative.callPackage ./pkgs/sd-nand-flasher-image.nix {
+          pkgs = pkgsCross;
+          inherit pkgsNative;
+          lib = pkgsCross.lib;
+          systemTopLevel = (finixSystem {
+            modules = [
+              ./configuration-nand-flasher.nix
+              ./modules/minimal.nix
+              ./modules/u-boot-rockchip
+              ./modules/cross-toplevel.nix
+            ];
+          }).config.system.topLevel;
+          inherit u-boot-rk3506;
+          kernel = linux-rockchip-rk3506;
+          ubiImage = "${nandImage}/ubi.img";
+        };
       };
 
       apps.${buildSystem} = import ./apps {
         pkgs = pkgsNative;
         sdImage = self.packages.${buildSystem}.sdImage;
         nandImage = self.packages.${buildSystem}.nandImage;
+        nandFlasherImage = self.packages.${buildSystem}.nandFlasherImage;
         rkbin = self.packages.${buildSystem}.rkbin;
       };
     };
