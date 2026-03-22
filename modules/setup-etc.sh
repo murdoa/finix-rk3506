@@ -6,6 +6,10 @@ set -euo pipefail
 etc="$1"
 static="/etc/static"
 
+# Ensure /tmp exists — mktemp needs it, and on first boot /tmp may not
+# exist yet (specialfs activation runs after etc activation).
+mkdir -p /tmp
+
 atomic_symlink() {
     local source="$1" target="$2" tmp="$target.tmp"
     rm -f "$tmp"

@@ -87,6 +87,33 @@
     ln -sfn "${pkgs.bashInteractive}/bin/sh" /bin/sh
   '';
 
+  # /etc/profile references coreutils for dircolors. Replace with busybox.
+  environment.etc.profile.text = lib.mkForce ''
+    if [ "$TERM" != "dumb" ]; then
+      PROMPT_COLOR="1;31m"
+      ((UID)) && PROMPT_COLOR="1;32m"
+      PS1="\n\[\033[$PROMPT_COLOR\][\u@\h:\w]\\$\[\033[0m\] "
+    fi
+    export PATH=/run/current-system/sw/bin:/run/current-system/sw/sbin
+  '';
+
+  # remount-nix-store.sh uses coreutils in runtimeInputs. Replace with busybox.
+  finit.tasks.remount-nix-store.command = lib.mkForce (pkgs.writeShellApplication {
+    name = "remount-nix-store.sh";
+    runtimeInputs = with pkgs; [
+      busybox
+      util-linux
+    ];
+    text = ''
+      chown -f 0:30000 /nix/store
+      chmod -f 1775 /nix/store
+      if ! [[ "$(findmnt --noheadings --output OPTIONS /nix/store)" =~ ro(,|$) ]]; then
+        mount --bind /nix/store /nix/store
+        mount -o remount,ro,bind /nix/store
+      fi
+    '';
+  });
+
   # Replace procps sysctl (2.8 MiB) with busybox sysctl.
   finit.tasks.sysctl.command = lib.mkForce
     "${pkgs.busybox}/bin/sysctl -p ${config.environment.etc."sysctl.d/60-finix.conf".source}";
