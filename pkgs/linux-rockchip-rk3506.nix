@@ -88,9 +88,16 @@
       arch/arm/boot/dts/Makefile
 
     # Rockchip vendor kernel forces UBI write self-check unconditionally
-    # (changed upstream's "if (!ubi->dbg.chk_io)" to "if (false)").
-    # This causes false positives on SPI NAND where ECC read-back doesn't
-    # byte-match the original write buffer. Revert to upstream behavior.
+    # by changing the guard from "if (!ubi_dbg_chk_io(ubi))" to "if (false)".
+    # This check reads back data after every write and compares byte-for-byte.
+    #
+    # On the RK3506 SFC + W25N02KV (on-die ECC), the read-back path
+    # systematically returns data that doesn't byte-match the write buffer.
+    # This is a hardware characteristic — not bad blocks. Every single UBI
+    # write fails the check, preventing UBI from attaching at all.
+    #
+    # Revert to upstream behavior: only run the check when UBI debug I/O
+    # checking is explicitly enabled. This is what mainline Linux does.
     sed -i 's/if (false)/if (!ubi_dbg_chk_io(ubi))/' drivers/mtd/ubi/io.c
   '';
 

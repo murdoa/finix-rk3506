@@ -11,9 +11,10 @@ mkApp "flash-nand" ''
   set -euo pipefail
 
   if [[ "''${1:-}" == "--help" || "''${1:-}" == "-h" ]]; then
-    echo "Usage: nix run .#flash-nand [--erase-first]"
+    echo "Usage: nix run .#flash-nand [--no-erase]"
     echo ""
     echo "Flash SPI NAND on Luckfox Lyra via rkdeveloptool."
+    echo "Erases the full flash before writing (default for NAND reliability)."
     echo ""
     echo "The board must be in Maskrom mode:"
     echo "  1. Hold the BOOT button"
@@ -21,7 +22,7 @@ mkApp "flash-nand" ''
     echo "  3. Release BOOT button"
     echo ""
     echo "Options:"
-    echo "  --erase-first   Erase flash before writing"
+    echo "  --no-erase   Skip full-chip erase before writing"
     echo ""
     exit 0
   fi
@@ -86,8 +87,8 @@ mkApp "flash-nand" ''
   rkdeveloptool db "$DB_LOADER"
   sleep 2
 
-  if [[ "''${1:-}" == "--erase-first" ]]; then
-    echo ">>> Erasing flash..."
+  if [[ "''${1:-}" != "--no-erase" ]]; then
+    echo ">>> Erasing flash (skip with --no-erase)..."
     rkdeveloptool ef
     sleep 1
   fi
