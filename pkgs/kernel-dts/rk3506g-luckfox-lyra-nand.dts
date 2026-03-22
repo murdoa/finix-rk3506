@@ -1,0 +1,177 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * SPI NAND boot DTS for Luckfox Lyra (RK3506G).
+ *
+ * Same as the SD DTS but replaces SD card rootfs with SPI NAND flash:
+ *   - MTD partition table via DT fixed-partitions
+ *   - UBI/UBIFS rootfs on the last partition
+ *   - SD card still enabled (useful for recovery/updates)
+ *
+ * Flash layout (128 MiB SPI NAND):
+ *   0x000000 -  0x400000  (4M)    idbloader — BootROM reads SPL from here
+ *   0x400000 -  0x800000  (4M)    u-boot.itb — SPL loads U-Boot FIT from here
+ *   0x800000 - 0x2000000  (24M)   boot — extlinux.conf, kernel, initrd, DTB
+ *   0x2000000 - end       (~96M)  ubi — UBIFS rootfs (LZO compressed)
+ */
+
+/dts-v1/;
+
+#include "rk3506-luckfox-lyra.dtsi"
+
+/ {
+	model = "Luckfox Lyra";
+	compatible = "rockchip,rk3506g-demo-display-control", "rockchip,rk3506";
+
+	chosen {
+		bootargs = "earlycon=uart8250,mmio32,0xff0a0000 console=ttyFIQ0";
+	};
+
+	/* ---- Cortex-M0 remoteproc ---- */
+	mcu_rproc: mcu@fff84000 {
+		compatible = "rockchip,rk3506-mcu";
+		reg = <0xfff84000 0x8000>;
+		firmware-name = "rk3506-m0.elf";
+
+		clocks = <&cru HCLK_M0>, <&cru STCLK_M0>;
+		resets = <&cru SRST_H_M0>, <&cru SRST_M0_JTAG>,
+			 <&cru SRST_HRESETN_M0_AC>;
+		reset-names = "h_m0", "m0_jtag", "hresetn_m0_ac";
+	};
+};
+
+/* ---- M0 reserved memory ---- */
+&reserved_memory {
+	mcu_reserved: mcu@fff80000 {
+		reg = <0xfff80000 0xc000>;
+		no-map;
+	};
+
+	rpmsg_reserved: rpmsg@3c00000 {
+		reg = <0x03c00000 0x100000>;
+		no-map;
+	};
+};
+
+/* ---- Disable everything we don't need ---- */
+
+&cma {
+	size = <0x0>;
+};
+
+&dsi {
+	status = "disabled";
+};
+
+&dsi_dphy {
+	status = "disabled";
+};
+
+&dsi_in_vop {
+	status = "disabled";
+};
+
+&route_dsi {
+	status = "disabled";
+};
+
+&gmac1 {
+	status = "disabled";
+};
+
+&mdio1 {
+	status = "disabled";
+};
+
+&usb20_otg0 {
+	status = "disabled";
+};
+
+&usb20_otg1 {
+	status = "disabled";
+};
+
+&i2c2 {
+	status = "disabled";
+};
+
+&tsadc {
+	status = "disabled";
+};
+
+/* ---- SPI NAND: add fixed-partitions for kernel MTD ---- */
+&fspi {
+	status = "okay";
+
+	flash@0 {
+		compatible = "spi-nand";
+		reg = <0>;
+		spi-max-frequency = <80000000>;
+		spi-rx-bus-width = <4>;
+		spi-tx-bus-width = <1>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "idbloader";
+				reg = <0x0 0x400000>;
+			};
+
+			partition@400000 {
+				label = "uboot";
+				reg = <0x400000 0x400000>;
+			};
+
+			partition@800000 {
+				label = "boot";
+				reg = <0x800000 0x1800000>;
+			};
+
+			partition@2000000 {
+				label = "ubi";
+				reg = <0x2000000 0x6000000>;
+			};
+		};
+	};
+};
+
+/* ---- SD card still enabled for recovery ---- */
+&mmc {
+	max-frequency = <52000000>;
+	bus-width = <4>;
+	no-sdio;
+	no-mmc;
+	cap-mmc-highspeed;
+	cap-sd-highspeed;
+	cd-gpios = <&gpio1 RK_PB6 GPIO_ACTIVE_LOW>;
+	disable-wp;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdmmc_clk_pins &sdmmc_cmd_pins &sdmmc_bus4_pins &sdmmc_det &sdmmc_pwren>;
+	vqmmc-supply = <&vcc_3v3>;
+	vmmc-supply = <&vcc_3v3>;
+	status = "okay";
+};
+
+&pinctrl {
+	sdmmc {
+		/omit-if-no-ref/
+		sdmmc_pwren: sdmmc-pwren {
+			rockchip,pins = <1 RK_PB7 RK_FUNC_GPIO &pcfg_pull_down>;
+		};
+
+		sdmmc_det: sdmmc-det {
+			rockchip,pins = <1 RK_PB6 RK_FUNC_GPIO &pcfg_pull_up>;
+		};
+	};
+};
+
+&ramoops {
+	reg = <0x05FD0000 0x2d000>;
+};
+
+&saradc {
+	vref-supply = <&vcc_1v8>;
+	status = "okay";
+};

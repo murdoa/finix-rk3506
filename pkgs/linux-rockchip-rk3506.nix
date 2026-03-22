@@ -48,6 +48,9 @@
 
     OVERLAY_FS = module;
 
+    # DT-based MTD partitions (fixed-partitions node in SPI NAND DTS)
+    MTD_OF_PARTS = yes;
+
     # Remoteproc framework — needed for M0 core driver
     REMOTEPROC = yes;
     REMOTEPROC_CDEV = yes;
@@ -79,15 +82,16 @@
   postPatch = (old.postPatch or "") + ''
     cp ${./kernel-dts/rk3506-luckfox-lyra.dtsi} arch/arm/boot/dts/rk3506-luckfox-lyra.dtsi
     cp ${./kernel-dts/rk3506g-luckfox-lyra-sd.dts} arch/arm/boot/dts/rk3506g-luckfox-lyra-sd.dts
+    cp ${./kernel-dts/rk3506g-luckfox-lyra-nand.dts} arch/arm/boot/dts/rk3506g-luckfox-lyra-nand.dts
 
-    sed -i '/rk3506g-demo-display-control.dtb/a\\trk3506g-luckfox-lyra-sd.dtb \\' \
+    sed -i '/rk3506g-demo-display-control.dtb/a\\trk3506g-luckfox-lyra-sd.dtb \\\n\trk3506g-luckfox-lyra-nand.dtb \\' \
       arch/arm/boot/dts/Makefile
   '';
 
   # Strip DTBs to only our board (saves ~20 MiB) and remove System.map (2.7 MiB)
   postInstall = (old.postInstall or "") + ''
     if [ -d $out/dtbs ]; then
-      find $out/dtbs -name '*.dtb' ! -name 'rk3506g-luckfox-lyra-sd.dtb' -delete
+      find $out/dtbs -name '*.dtb' ! -name 'rk3506g-luckfox-lyra-*.dtb' -delete
       find $out/dtbs -type d -empty -delete
     fi
     rm -f $out/System.map

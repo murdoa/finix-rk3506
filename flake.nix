@@ -124,6 +124,15 @@
         ];
       };
 
+      nixosConfigurations.rk3506-nand = finixSystem {
+        modules = [
+          ./configuration-nand.nix
+          ./modules/minimal.nix
+          ./modules/u-boot-rockchip
+          ./modules/cross-toplevel.nix
+        ];
+      };
+
       packages.${buildSystem} = rec {
         # Cross-compiled packages for the target
         rkbin = pkgsNative.callPackage ./pkgs/rkbin.nix { };
@@ -148,11 +157,29 @@
           inherit u-boot-rk3506;
           kernel = linux-rockchip-rk3506;
         };
+
+        # Bootable SPI NAND image (128 MiB, UBIFS rootfs)
+        nandImage = pkgsNative.callPackage ./pkgs/nand-image.nix {
+          pkgs = pkgsCross;
+          inherit pkgsNative;
+          lib = pkgsCross.lib;
+          systemTopLevel = (finixSystem {
+            modules = [
+              ./configuration-nand.nix
+              ./modules/minimal.nix
+              ./modules/u-boot-rockchip
+              ./modules/cross-toplevel.nix
+            ];
+          }).config.system.topLevel;
+          inherit u-boot-rk3506;
+          kernel = linux-rockchip-rk3506;
+        };
       };
 
       apps.${buildSystem} = import ./apps {
         pkgs = pkgsNative;
         sdImage = self.packages.${buildSystem}.sdImage;
+        nandImage = self.packages.${buildSystem}.nandImage;
       };
     };
 }
